@@ -1,0 +1,671 @@
+diff --git a/PRIVACY.md b/PRIVACY.md
+index 3c59383..5a8f5d0 100644
+--- a/PRIVACY.md
++++ b/PRIVACY.md
+@@ -2,6 +2,6 @@
+ 
+ This extension reads only the ChatGPT assistant reply whose Irodori button you click. It sends that reply to the Irodori-TTS Server URL you configured, then plays the returned audio in the browser.
+ 
+-The server URL and selected voice ID are stored in Chrome local storage. No API keys, OpenAI API calls, ElevenLabs calls, analytics, or telemetry are used by this extension.
++The server URL, selected voice ID, and speech rate are stored in Chrome local storage. No API keys, OpenAI API calls, ElevenLabs calls, analytics, or telemetry are used by this extension.
+ 
+ If you configure a server on another host, Chrome asks for access to that host. The reply text is then transmitted to that configured host when you click its read button.
+diff --git a/README.md b/README.md
+index 6df3139..880245e 100644
+--- a/README.md
++++ b/README.md
+@@ -1,47 +1,62 @@
+-# ChatGPT × Irodori v0.1
++# ChatGPT × Irodori v0.2
+ 
+-ChatGPT Web の各回答に「🔊 Irodori」ボタンを追加し、選んだ回答の本文をローカルの Irodori-TTS Server で音声化する Chrome 拡張です。[Better Chat Voice](https://github.com/G1enB1and/better-chat-voice) をベースにしています。外部の有料 TTS API と API キーは不要です。
++ChatGPT Web の assistant 回答を、ローカルの Irodori-TTS Server で音声に変換して再生する Chrome 拡張です。読み上げたい回答の「🔊 Irodori」を押して使います。OpenAI API、ElevenLabs、有料 TTS API、Python Bridge は使いません。
++
++[Better Chat Voice](https://github.com/G1enB1and/better-chat-voice) を基にした Manifest V3 拡張です。元プロジェクトのライセンスは [LICENSE (MIT).md](LICENSE%20(MIT).md) を参照してください。
+ 
+ ## 必要環境
+ 
+-- Google Chrome
+-- ChatGPT アカウント（通常の ChatGPT Web 利用）
+-- [Irodori-TTS Server](https://github.com/Aratako/Irodori-TTS-Server)
+-- MP3 出力を使うため、Irodori 側に FFmpeg が必要です。
++- Google Chrome と ChatGPT アカウント
++- [Irodori-TTS Server](https://github.com/Aratako/Irodori-TTS-Server) が起動済みの PC
++- Irodori-TTS Server が必要とするモデル、Voice、FFmpeg 等の実行環境
++
++拡張から Server を起動・停止する機能はありません。Server は別途起動してください。標準接続先は `http://127.0.0.1:8088` です。
++
++## Chrome への導入と起動順
++
++1. Irodori-TTS Server を起動します。環境に `start_server.bat` または `start_server_hidden.vbs` がある場合は、その設定に従って起動します。
++2. Chrome で `chrome://extensions` を開き、右上の「デベロッパー モード」を有効にします。
++3. 「パッケージ化されていない拡張機能を読み込む」を押し、この `chatgpt-irodori-voice` フォルダーを選びます。
++4. 拡張の popup で Server URL を確認し、「接続確認」を押します。
++5. Voice を選択し、必要なら読み上げ速度を変更します。
++6. `https://chatgpt.com/` を開き、assistant 回答の「🔊 Irodori」を押します。
++
++拡張のファイルを更新した後は `chrome://extensions` で拡張を再読み込みし、ChatGPT のタブも再読み込みしてください。
++
++## 設定
+ 
+-## Chrome への導入
++popup には Server URL、接続状態、Voice、Voice 一覧の再読込、読み上げ速度を表示します。Server URL、Voice、速度は Chrome Storage に保存されます。
+ 
+-1. Chrome で \`chrome://extensions\` を開く。
+-2. 「デベロッパー モード」を有効にする。
+-3. 「パッケージ化されていない拡張機能を読み込む / Load unpacked」で、この \`chatgpt-irodori-voice\` フォルダを選ぶ。
+-4. 拡張アイコンから設定画面を開く。
++「接続確認」は Server への接続確認後に Voice 一覧も更新します。「Voice一覧を再読込」は、Server 起動後に `voices/` へ Voice を追加したときに使います。現在の Voice が一覧に残っていれば選択を維持し、一覧から消えた場合だけ未選択にします。Voice 一覧が取得できない場合、保存済みの選択は消しません。
+ 
+-## 起動と操作
++Irodori-TTS Server が Voice API で返す ID をそのまま選択できます。`.speaker.safetensors` の Speaker Embedding Voice も通常の Voice と同じように表示、保存、送信します。専用設定はありません。
+ 
+-1. Irodori-TTS Server を起動する。既定の接続先は \`http://127.0.0.1:8088\`。
+-2. Chrome を起動し、拡張機能を有効にする。
+-3. 設定画面で「接続確認」を押し、Voice を選ぶ。Voice 選択は自動保存される。
+-4. \`https://chatgpt.com/\` を開く。既に開いていた場合はページを再読み込みする。
+-5. 任意の GPT 回答の「🔊 Irodori」を押す。生成中・再生中に同じボタンの「■ Stop」を押すと停止する。別の回答を押すと前の処理が停止する。
++状態表示は次のとおりです。
+ 
+-Server URL を変えた場合は「接続確認」を押して保存してください。別ホストへの変更時だけ、そのホストへのアクセス許可を Chrome が求めます。既定の \`127.0.0.1\` と \`localhost\` は任意のポートで利用できます。
++| 表示 | 意味 |
++| --- | --- |
++| 接続OK | Server と Voice API に接続できた |
++| Server未接続 | Server に接続できない。起動と URL を確認する |
++| 接続OK / Voiceなし | Server は動作中だが Voice 一覧が空 |
++| 接続OK / Voice取得失敗 | Server に接続できたが Voice API に失敗した |
+ 
+-Voice が一覧に出ない場合は、Irodori 側の \`voices/\` に参照音声を置いてください。Irodori の設定で \`none\` が有効なら、サーバーが返す一覧から選べます。Voice 一覧が取得できない時も拡張は動作を継続し、保存済み Voice があれば維持します。
++### 読み上げ速度
+ 
+-## 仕組み
++`0.8x`、`0.9x`、`1.0x`、`1.1x`、`1.2x` から選べます。初期値は `1.0x` です。選択値は音声生成時に Irodori-TTS Server の正式な `/v1/audio/speech` の `speed` パラメータとして送ります。ブラウザの `audio.playbackRate` は使いません。Irodori の [API 実装](https://github.com/Aratako/Irodori-TTS-Server/blob/main/src/irodori_openai_tts/app.py)で速度指定を確認しています。
+ 
+-回答本文からコードブロックと操作 UI を除き、全文を一度だけ service worker へ渡します。service worker が \`GET /v1/models\` で model ID を取得し、\`POST /v1/audio/speech\` に \`input\`、\`voice\`、\`response_format: "mp3"\` を送ります。音声全体を受信後、ページ内の単一プレイヤーで再生します。ブラウザ側で文章を分割しません。
++## 読み上げ
+ 
+-設定画面は \`GET /health\` で接続を確認し、\`GET /v1/audio/voices\` で Voice を取得します。通信は service worker から行うため、Irodori 側の追加 CORS 設定や Python Bridge は通常不要です。[Chrome の拡張ネットワーク仕様](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests/)に従い、既定ホストは manifest 権限、変更先は[任意ホスト権限](https://developer.chrome.com/docs/extensions/reference/api/permissions/)を使います。
++回答ごとの「🔊 Irodori」を押すと、その回答の全文を 1 回のリクエストで Server に送ります。再生中または生成中は「■ Stop」を押すと停止します。別の回答を押すと現在の生成・再生を止め、新しい回答に切り替えます。自動読み上げや音声ストリーミングはありません。
+ 
+-Irodori の API 形式は[公式 README](https://github.com/Aratako/Irodori-TTS-Server#api)を基準にしています。Irodori 側で独自の Bearer 認証を有効にした構成は v0.1 の対象外です。
++読み上げ前に、コードブロック、URL、citation や source の操作 UI、コピー等のボタン、非表示要素を可能な範囲で除外します。Markdown の見出し・強調・箇条書き・インラインコードの記号は取り除き、本文や表示用リンク名は残します。段落と見出しの区切りも残します。ChatGPT の DOM 変更によって citation 等の新しい表示形式が現れた場合は、除外しきれないことがあります。
+ 
+-## 制限
++## 接続方式
+ 
+-- 自動読み上げ、SSE、ブラウザ側 chunk 分割、音声キャッシュはありません。
+-- Irodori の音声生成が非常に長い場合、Chrome の service worker の実行制限や拡張メッセージのサイズ制限に影響される可能性があります。
+-- ChatGPT の DOM が変わるとボタン表示や本文抽出を調整する必要があります。
++`content.js` が assistant 回答を取得し、`background.js` の service worker がローカル Irodori-TTS Server に直接 HTTP リクエストを送ります。Server URL を標準接続先以外へ変える場合は、接続確認時に Chrome のホストアクセス許可を求めます。音声データは ChatGPT のページで再生します。
+ 
+-## ライセンスと出典
++## 制約
+ 
+-元プロジェクトの MIT ライセンスは [LICENSE (MIT).md](LICENSE%20(MIT).md) を参照してください。アイコンと初期の拡張構成は Better Chat Voice 由来です。
++- Irodori-TTS Server の起動、Voice とモデルの設定は別途必要です。
++- 長文はブラウザ側で分割しません。生成完了まで再生は始まりません。
++- 非常に長い音声では、拡張メッセージを通じた音声データ転送に時間とメモリがかかる可能性があります。
++- Server で独自の認証を有効にした構成には未対応です。
+diff --git a/background.js b/background.js
+index 1f72a2e..0e98472 100644
+--- a/background.js
++++ b/background.js
+@@ -70,8 +70,11 @@ async function generateSpeech(text, requestId, tabId) {
+   }
+   activeRequests.set(key, controller);
+   try {
+-    const { voiceId } = await chrome.storage.local.get('voiceId');
++    const { voiceId, speechRate = 1 } = await chrome.storage.local.get(['voiceId', 'speechRate']);
+     if (!voiceId) throw new Error('VOICE_REQUIRED');
++    const storedSpeed = Number(speechRate);
++    const speed = Number.isFinite(storedSpeed) && storedSpeed >= 0.25 && storedSpeed <= 4
++      ? storedSpeed : 1;
+     const baseUrl = await getServerUrl();
+     const model = await getModelId(baseUrl, controller.signal);
+     const response = await fetch(baseUrl + '/v1/audio/speech', {
+@@ -81,6 +84,7 @@ async function generateSpeech(text, requestId, tabId) {
+         model,
+         input: text,
+         voice: voiceId,
++        speed,
+         response_format: 'mp3'
+       }),
+       signal: controller.signal
+diff --git a/content.js b/content.js
+index d0449d5..7541c0e 100644
+--- a/content.js
++++ b/content.js
+@@ -4,9 +4,13 @@ let sequence = 0;
+ let scanScheduled = false;
+ 
+ const SKIP_SELECTOR = [
+-  'pre', 'button', '[role="button"]', 'nav', 'svg', 'script', 'style',
++  'pre', 'button', '[role="button"]', 'nav', 'aside', 'footer', 'svg', 'script', 'style',
+   '[hidden]', '[aria-hidden="true"]', '.sr-only',
+-  '[data-testid*="citation"]', 'sup', '.irodori-action'
++  '[data-testid*="citation"]', '[data-testid*="sources"]',
++  '[data-testid*="reference"]', 'a[data-testid*="source"]',
++  '[data-citation]', '[data-source-chip]',
++  '[aria-label^="Citation"]', '[aria-label^="Source"]',
++  'sup', '.irodori-action'
+ ].join(',');
+ const BLOCK_TAGS = new Set([
+   'DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI',
+@@ -43,10 +47,29 @@ function extractReplyText(root) {
+     const block = BLOCK_TAGS.has(element.tagName);
+     if (block) chunks.push('\n');
+     for (const child of element.childNodes) visit(child);
+-    if (block) chunks.push('\n');
++    if (block && element.tagName !== 'LI') chunks.push('\n');
+   }
+   visit(root);
+-  return chunks.join('')
++  return chunks.join('');
++}
++
++function sanitizeForSpeech(text) {
++  return text
++    // ChatGPT usually renders Markdown; this also handles raw Markdown text.
++    .replace(/(^|\n)\s*\x60{3}[\s\S]*?\x60{3}(?=\n|$)/g, '\n')
++    .replace(/!?\[([^\]]+)\]\([^)]+\)/g, '$1')
++    .replace(/(^|\n)[ \t]{0,3}#{1,6}[ \t]+/g, '$1')
++    .replace(/(^|\n)[ \t]*>[ \t]?/g, '$1')
++    .replace(/(^|\n)[ \t]*[-*+][ \t]+/g, '$1')
++    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
++    .replace(/__([^_\n]+)__/g, '$1')
++    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1')
++    .replace(/\x60+([^\x60\n]+)\x60+/g, '$1')
++    .replace(/\b(?:https?:\/\/|www\.)[^\s<>"'\x60「」]+/gi, match => {
++      // Preserve sentence punctuation following a URL.
++      return match.match(/[.,!?;:、。！？，）)\]]+$/u)?.[0] || '';
++    })
++    .replace(/(^|\n)[ \t]*[。.,!?！？，]+[ \t]*(?=\n|$)/g, '$1')
+     .replace(/\u00a0/g, ' ')
+     .replace(/[ \t]+\n/g, '\n')
+     .replace(/\n[ \t]+/g, '\n')
+@@ -97,7 +120,7 @@ async function readReply(button, turn) {
+     return;
+   }
+   stopActive();
+-  const text = extractReplyText(messageBody(turn));
++  const text = sanitizeForSpeech(extractReplyText(messageBody(turn)));
+   if (!text) {
+     showStatus(button, '読み上げる本文がありません。');
+     return;
+diff --git a/manifest.json b/manifest.json
+index de17753..4f5e101 100644
+--- a/manifest.json
++++ b/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 3,
+   "name": "ChatGPT × Irodori",
+-  "version": "0.1.0",
++  "version": "0.2.0",
+   "description": "Read individual ChatGPT replies aloud with a local Irodori-TTS Server.",
+   "permissions": ["storage"],
+   "host_permissions": ["https://chatgpt.com/*", "http://127.0.0.1/*", "http://localhost/*"],
+diff --git a/popup.html b/popup.html
+index 92d16b4..0820e34 100644
+--- a/popup.html
++++ b/popup.html
+@@ -12,15 +12,28 @@
+       <img src="icon32.png" alt="" width="28" height="28">
+       <h1>ChatGPT × Irodori</h1>
+     </header>
+-    <label for="serverUrl">Irodori Server</label>
++    <label for="serverUrl">Server</label>
+     <input id="serverUrl" type="url" spellcheck="false" value="http://127.0.0.1:8088">
+     <p class="hint">接続確認を押すとURLを保存します。</p>
++    <button id="connect" type="button">接続確認</button>
++    <div class="status-block">
++      <span class="status-label">状態</span>
++      <p id="status" role="status" aria-live="polite">● 確認中</p>
++      <p id="statusDetail" class="hint"></p>
++    </div>
+     <label for="voiceSelect">Voice</label>
+     <select id="voiceSelect">
+       <option value="">Voiceを選択してください</option>
+     </select>
+-    <button id="connect" type="button">接続確認</button>
+-    <p id="status" role="status" aria-live="polite"></p>
++    <button id="reloadVoices" class="secondary" type="button">Voice一覧を再読込</button>
++    <label for="speedSelect">読み上げ速度</label>
++    <select id="speedSelect">
++      <option value="0.8">0.8x</option>
++      <option value="0.9">0.9x</option>
++      <option value="1" selected>1.0x</option>
++      <option value="1.1">1.1x</option>
++      <option value="1.2">1.2x</option>
++    </select>
+   </main>
+   <script src="popup.js"></script>
+ </body>
+diff --git a/popup.js b/popup.js
+index 7b219c8..a2db6b8 100644
+--- a/popup.js
++++ b/popup.js
+@@ -1,8 +1,11 @@
+ const DEFAULT_SERVER = 'http://127.0.0.1:8088';
+ const serverInput = document.querySelector('#serverUrl');
+ const voiceSelect = document.querySelector('#voiceSelect');
++const speedSelect = document.querySelector('#speedSelect');
+ const status = document.querySelector('#status');
++const statusDetail = document.querySelector('#statusDetail');
+ const connectButton = document.querySelector('#connect');
++const reloadButton = document.querySelector('#reloadVoices');
+ 
+ function normalizeServerUrl(value) {
+   const url = new URL(value.trim());
+@@ -23,45 +26,118 @@ function sendMessage(action) {
+   });
+ }
+ 
+-function setStatus(message) {
+-  status.textContent = message;
++function setStatus(state, label, detail = '') {
++  status.dataset.state = state;
++  status.textContent = '● ' + label;
++  statusDetail.textContent = detail;
+ }
+ 
+-async function refreshVoices(savedVoiceId = '') {
++function setBusy(busy) {
++  connectButton.disabled = busy;
++  reloadButton.disabled = busy;
++}
++
++async function refreshVoices() {
++  const { voiceId = '' } = await chrome.storage.local.get('voiceId');
+   const response = await sendMessage('listVoices');
+-  if (response?.error) throw new Error(response.error);
++  if (response?.error || !Array.isArray(response?.voices)) {
++    throw new Error(response?.error || 'Invalid voice list');
++  }
+   voiceSelect.replaceChildren();
+   voiceSelect.add(new Option('Voiceを選択してください', ''));
+-  for (const voice of response.voices || []) {
+-    voiceSelect.add(new Option(voice.name, voice.id));
++  for (const voice of response.voices) {
++    voiceSelect.add(new Option(voice.name || voice.id, voice.id));
+   }
+-  if (savedVoiceId && [...voiceSelect.options].some(option => option.value === savedVoiceId)) {
+-    voiceSelect.value = savedVoiceId;
++  const stillAvailable = voiceId &&
++    [...voiceSelect.options].some(option => option.value === voiceId);
++  voiceSelect.value = stillAvailable ? voiceId : '';
++  if (voiceId && !stillAvailable) await chrome.storage.local.remove('voiceId');
++  return { count: response.voices.length, selected: !!voiceSelect.value };
++}
++
++function showVoiceState({ count, selected }) {
++  if (count === 0) {
++    setStatus('warning', '接続OK / Voiceなし',
++      'Irodori-TTS Serverのvoices設定を確認してください。');
+   } else {
+-    voiceSelect.value = '';
+-    if (savedVoiceId) await chrome.storage.local.remove('voiceId');
++    setStatus('ok', '接続OK', selected ? '' : 'Voiceを選択してください。');
+   }
+ }
+ 
+-async function loadSettings() {
+-  const { serverUrl = DEFAULT_SERVER, voiceId = '' } =
+-    await chrome.storage.local.get(['serverUrl', 'voiceId']);
+-  serverInput.value = serverUrl;
++async function checkConnectionAndVoices() {
++  try {
++    const response = await sendMessage('checkConnection');
++    if (!response?.ok) throw new Error(response?.error || 'Connection failed');
++  } catch (error) {
++    console.error('[Irodori] Connection check failed:', error);
++    setStatus('error', 'Server未接続',
++      'Irodori-TTS Serverが起動しているか確認してください。');
++    return;
++  }
+   try {
+-    await refreshVoices(voiceId);
++    showVoiceState(await refreshVoices());
+   } catch (error) {
+     console.error('[Irodori] Voice list failed:', error);
+-    if (voiceId) {
+-      voiceSelect.add(new Option(voiceId + '（保存済み）', voiceId));
+-      voiceSelect.value = voiceId;
+-    }
+-    setStatus('Voice一覧を取得できません。');
++    setStatus('warning', '接続OK / Voice取得失敗');
+   }
+ }
+ 
++async function loadSettings() {
++  const { serverUrl = DEFAULT_SERVER, voiceId = '', speechRate = 1 } =
++    await chrome.storage.local.get(['serverUrl', 'voiceId', 'speechRate']);
++  serverInput.value = serverUrl;
++  if (voiceId) {
++    voiceSelect.add(new Option(voiceId + '（保存済み）', voiceId));
++    voiceSelect.value = voiceId;
++  }
++  const rate = String(speechRate);
++  speedSelect.value = [...speedSelect.options].some(option => option.value === rate) ? rate : '1';
++  if (speedSelect.value !== rate) await chrome.storage.local.set({ speechRate: 1 });
++  await checkConnectionAndVoices();
++}
++
+ voiceSelect.addEventListener('change', async () => {
+   await chrome.storage.local.set({ voiceId: voiceSelect.value });
+-  setStatus(voiceSelect.value ? 'Voiceを保存しました。' : 'Voiceを選択してください。');
++  if (status.dataset.state === 'ok') {
++    statusDetail.textContent = voiceSelect.value ? 'Voiceを保存しました。' : 'Voiceを選択してください。';
++  }
++});
++
++speedSelect.addEventListener('change', async () => {
++  await chrome.storage.local.set({ speechRate: Number(speedSelect.value) });
++});
++
++reloadButton.addEventListener('click', async () => {
++  const { serverUrl = DEFAULT_SERVER } = await chrome.storage.local.get('serverUrl');
++  let enteredUrl;
++  try {
++    enteredUrl = normalizeServerUrl(serverInput.value).origin;
++  } catch {
++    statusDetail.textContent = 'Server URLを確認してください。';
++    return;
++  }
++  if (enteredUrl !== serverUrl) {
++    statusDetail.textContent = 'URL変更後は接続確認を押してください。';
++    return;
++  }
++  setBusy(true);
++  try {
++    showVoiceState(await refreshVoices());
++  } catch (error) {
++    console.error('[Irodori] Voice reload failed:', error);
++    // A failed Voice API may mean either a stopped server or just a Voice failure.
++    try {
++      const health = await sendMessage('checkConnection');
++      if (!health?.ok) throw new Error(health?.error || 'Connection failed');
++      setStatus('warning', '接続OK / Voice取得失敗');
++    } catch (healthError) {
++      console.error('[Irodori] Connection check failed:', healthError);
++      setStatus('error', 'Server未接続',
++        'Irodori-TTS Serverが起動しているか確認してください。');
++    }
++  } finally {
++    setBusy(false);
++  }
+ });
+ 
+ connectButton.addEventListener('click', async () => {
+@@ -69,10 +145,9 @@ connectButton.addEventListener('click', async () => {
+   try {
+     url = normalizeServerUrl(serverInput.value);
+   } catch {
+-    setStatus('Server URLを確認してください。');
++    statusDetail.textContent = 'Server URLを確認してください。';
+     return;
+   }
+-  // Match patterns without a port cover all ports for this host.
+   const isDefaultHost = url.protocol === 'http:' &&
+     ['127.0.0.1', 'localhost'].includes(url.hostname);
+   if (!isDefaultHost) {
+@@ -81,43 +156,34 @@ connectButton.addEventListener('click', async () => {
+         origins: [url.protocol + '//' + url.hostname + '/*']
+       });
+       if (!granted) {
+-        setStatus('Serverへのアクセス許可が必要です。');
++        statusDetail.textContent = 'Serverへのアクセス許可が必要です。';
+         return;
+       }
+     } catch (error) {
+       console.error('[Irodori] Permission request failed:', error);
+-      setStatus('Serverへのアクセス許可が必要です。');
++      statusDetail.textContent = 'Serverへのアクセス許可が必要です。';
+       return;
+     }
+   }
+-  connectButton.disabled = true;
++  setBusy(true);
+   try {
+-    const { serverUrl: previousUrl = DEFAULT_SERVER, voiceId = '' } =
+-      await chrome.storage.local.get(['serverUrl', 'voiceId']);
++    const { serverUrl: previousUrl = DEFAULT_SERVER } =
++      await chrome.storage.local.get('serverUrl');
+     const changed = previousUrl !== url.origin;
+-    await chrome.storage.local.set({
+-      serverUrl: url.origin,
+-      voiceId: changed ? '' : voiceId
+-    });
++    await chrome.storage.local.set({ serverUrl: url.origin });
+     if (changed) {
++      await chrome.storage.local.remove('voiceId');
+       voiceSelect.replaceChildren();
+       voiceSelect.add(new Option('Voiceを選択してください', ''));
+     }
+     serverInput.value = url.origin;
+-    const response = await sendMessage('checkConnection');
+-    if (!response?.ok) throw new Error(response?.error || 'Connection failed');
+-    setStatus('接続OK');
+-    try {
+-      await refreshVoices(changed ? '' : voiceId);
+-    } catch (error) {
+-      console.error('[Irodori] Voice list failed:', error);
+-      setStatus('接続OK（Voice一覧を取得できません）');
+-    }
++    await checkConnectionAndVoices();
+   } catch (error) {
+-    console.error('[Irodori] Connection check failed:', error);
+-    setStatus('接続できません');
++    console.error('[Irodori] Server settings failed:', error);
++    setStatus('error', 'Server未接続',
++      'Irodori-TTS Serverが起動しているか確認してください。');
+   } finally {
+-    connectButton.disabled = false;
++    setBusy(false);
+   }
+ });
+ 
+diff --git a/styles.css b/styles.css
+index d2b2a0a..a125d07 100644
+--- a/styles.css
++++ b/styles.css
+@@ -10,4 +10,11 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid #70d3bb; ou
+ .hint { margin: 5px 0 0; color: #bac5d2; font-size: 12px; }
+ button { width: 100%; margin-top: 18px; padding: 10px; border: 0; border-radius: 6px; background: #10a37f; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+ button:disabled { opacity: .6; cursor: wait; }
+-#status { min-height: 1.5em; margin: 11px 0 0; color: #d7e2ed; }
++button.secondary { margin-top: 9px; border: 1px solid #586679; background: #253449; }
++.status-block { margin: 15px 0; padding: 10px; border: 1px solid #44566b; border-radius: 6px; background: #1b2736; }
++.status-label { color: #bac5d2; font-size: 12px; }
++#status { margin: 3px 0 0; font-weight: 700; }
++#status[data-state="ok"] { color: #70d3bb; }
++#status[data-state="error"] { color: #ff9f9f; }
++#status[data-state="warning"] { color: #ffd285; }
++#statusDetail:empty { display: none; }
+diff --git a/tests/background.test.js b/tests/background.test.js
+index c6f92ba..957f901 100644
+--- a/tests/background.test.js
++++ b/tests/background.test.js
+@@ -7,9 +7,9 @@ const vm = require('node:vm');
+ const source = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
+ const sender = { tab: { id: 7 }, url: 'https://chatgpt.com/c/example' };
+ 
+-function setup({ voiceId = 'shiori', serverUrl = 'http://127.0.0.1:8088', fetch }) {
++function setup({ voiceId = 'shiori', serverUrl = 'http://127.0.0.1:8088', speechRate = 1, fetch }) {
+   let listener;
+-  const data = { voiceId, serverUrl };
++  const data = { voiceId, serverUrl, speechRate };
+   const chrome = {
+     runtime: { onMessage: { addListener(fn) { listener = fn; } } },
+     storage: { local: { async get() { return data; } } },
+@@ -47,10 +47,29 @@ test('sends the selected reply and voice to the local speech API', async () => {
+   assert.equal(requests[1].url, 'http://127.0.0.1:8088/v1/audio/speech');
+   assert.equal(requests[1].options.method, 'POST');
+   assert.deepEqual(JSON.parse(requests[1].options.body), {
+-    model: 'server-model', input: '対象の回答', voice: 'shiori', response_format: 'mp3'
++    model: 'server-model', input: '対象の回答', voice: 'shiori',
++    speed: 1, response_format: 'mp3'
+   });
+ });
+ 
++test('passes the saved speed and speaker embedding voice ID to Irodori', async () => {
++  let body;
++  const message = setup({
++    voiceId: '敷嶋てとら_02',
++    speechRate: 1.2,
++    fetch: async (url, options = {}) => {
++      if (url.endsWith('/v1/models')) {
++        return new Response(JSON.stringify({ data: [{ id: 'irodori-tts' }] }));
++      }
++      body = JSON.parse(options.body);
++      return new Response(new Uint8Array([1]), { headers: { 'content-type': 'audio/mpeg' } });
++    }
++  });
++  await message({ action: 'tts', requestId: 'speed', payload: '速度テスト' });
++  assert.equal(body.voice, '敷嶋てとら_02');
++  assert.equal(body.speed, 1.2);
++});
++
+ test('reports an unset voice without a network request', async () => {
+   const message = setup({
+     voiceId: '',
+diff --git a/tests/content.test.js b/tests/content.test.js
+index eb8fcbe..4ac10e2 100644
+--- a/tests/content.test.js
++++ b/tests/content.test.js
+@@ -17,6 +17,7 @@ function element(tagName, children = [], options = {}) {
+     childNodes: children,
+     hidden: options.hidden,
+     matches(selector) {
++      if (options.selector && selector.includes(options.selector)) return true;
+       return ['PRE', 'BUTTON'].includes(tagName) && selector.includes(tagName.toLowerCase());
+     }
+   };
+@@ -49,3 +50,28 @@ test('extracts headings and list text while excluding code, controls, and hidden
+   assert.match(result, /項目B/);
+   assert.doesNotMatch(result, /SECRET_CODE|コピー|隠しテキスト/);
+ });
++
++test('keeps readable labels and sections, removing URLs and Markdown syntax', () => {
++  const context = vm.createContext({
++    Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
++    document: { body: {}, querySelectorAll: () => [] },
++    MutationObserver: class { observe() {} },
++    requestAnimationFrame() {},
++    getComputedStyle: () => ({ display: 'block', visibility: 'visible' })
++  });
++  vm.runInContext(source, context);
++  context.fixture = element('DIV', [
++    element('H2', [text('## Server設定')]),
++    element('P', [text('**重要**: '), element('A', [text('公式サイト')]), text('を参照。')]),
++    element('P', [text('https://example.com/path?id=123。')]),
++    element('UL', [element('LI', [text('- Apple')]), element('LI', [text('- Banana')])]),
++    element('SPAN', [text('Sources 1')], { selector: '[data-testid*="citation"]' }),
++    element('P', [text('`Irodori-TTS` と [OpenAI公式サイト](https://openai.com/)')])
++  ]);
++  const result = vm.runInContext('sanitizeForSpeech(extractReplyText(fixture))', context);
++  assert.match(result, /Server設定/);
++  assert.match(result, /重要: 公式サイトを参照。/);
++  assert.match(result, /Apple\nBanana/);
++  assert.match(result, /Irodori-TTS と OpenAI公式サイト/);
++  assert.doesNotMatch(result, /https?:|example\.com|Sources|\*\*|^##|^- /m);
++});
+diff --git a/tests/popup.test.js b/tests/popup.test.js
+new file mode 100644
+index 0000000..4ff7e4b
+--- /dev/null
++++ b/tests/popup.test.js
+@@ -0,0 +1,93 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const vm = require('node:vm');
++
++const source = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
++
++function setup({ voiceId = 'shiori', speechRate = 1, voices = [{ id: 'shiori' }], health = true,
++  voiceError = false } = {}) {
++  const data = { serverUrl: 'http://127.0.0.1:8088', voiceId, speechRate };
++  const server = { voices, health, voiceError };
++  const elements = {};
++  for (const id of ['serverUrl', 'voiceSelect', 'speedSelect', 'status',
++    'statusDetail', 'connect', 'reloadVoices']) {
++    elements[id] = {
++      value: '', textContent: '', dataset: {}, options: [], disabled: false, listeners: {},
++      addEventListener(type, fn) { this.listeners[type] = fn; },
++      replaceChildren() { this.options = []; },
++      add(option) { this.options.push(option); }
++    };
++  }
++  elements.speedSelect.options = ['0.8', '0.9', '1', '1.1', '1.2']
++    .map(value => ({ value }));
++  const chrome = {
++    storage: { local: {
++      async get(keys) {
++        const names = Array.isArray(keys) ? keys : [keys];
++        return Object.fromEntries(names.filter(key => key in data).map(key => [key, data[key]]));
++      },
++      async set(values) { Object.assign(data, values); },
++      async remove(key) { delete data[key]; }
++    } },
++    runtime: {
++      lastError: null,
++      sendMessage({ action }, callback) {
++        if (action === 'checkConnection') callback(server.health ? { ok: true } : { error: 'CONNECTION' });
++        if (action === 'listVoices') callback(server.voiceError ?
++          { error: 'GENERATION' } : { voices: server.voices });
++      }
++    },
++    permissions: { async request() { return true; } }
++  };
++  const context = vm.createContext({
++    chrome, URL,
++    Option: class { constructor(label, value) { this.label = label; this.value = value; } },
++    document: { querySelector(selector) { return elements[selector.slice(1)]; } },
++    console: { error() {} }
++  });
++  vm.runInContext(source, context);
++  return { data, server, elements, ready: new Promise(resolve => setImmediate(resolve)) };
++}
++
++test('reload keeps the selected embedding voice until it disappears', async () => {
++  const fixture = setup({
++    voiceId: 'embedding',
++    voices: [{ id: 'embedding' }, { id: 'shiori' }],
++    speechRate: 0.9
++  });
++  await fixture.ready;
++  assert.equal(fixture.elements.status.textContent, '● 接続OK');
++  assert.equal(fixture.elements.voiceSelect.value, 'embedding');
++  assert.equal(fixture.elements.speedSelect.value, '0.9');
++  fixture.server.voices = [{ id: 'shiori' }, { id: 'embedding' }];
++  await fixture.elements.reloadVoices.listeners.click();
++  assert.equal(fixture.elements.voiceSelect.value, 'embedding');
++  fixture.server.voices = [{ id: 'shiori' }];
++  await fixture.elements.reloadVoices.listeners.click();
++  assert.equal(fixture.elements.voiceSelect.value, '');
++  assert.equal(fixture.data.voiceId, undefined);
++});
++
++test('popup distinguishes disconnected, no voices, and voice API failure', async () => {
++  const disconnected = setup({ health: false });
++  await disconnected.ready;
++  assert.equal(disconnected.elements.status.textContent, '● Server未接続');
++  const empty = setup({ voices: [] });
++  await empty.ready;
++  assert.equal(empty.elements.status.textContent, '● 接続OK / Voiceなし');
++  const failed = setup({ voiceError: true });
++  await failed.ready;
++  assert.equal(failed.elements.status.textContent, '● 接続OK / Voice取得失敗');
++  assert.equal(failed.elements.voiceSelect.value, 'shiori');
++  assert.equal(failed.data.voiceId, 'shiori');
++});
++
++test('speed selection is persisted', async () => {
++  const fixture = setup();
++  await fixture.ready;
++  fixture.elements.speedSelect.value = '1.2';
++  await fixture.elements.speedSelect.listeners.change();
++  assert.equal(fixture.data.speechRate, 1.2);
++});

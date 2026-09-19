@@ -1,18 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Better Chat Voice",
-  "version": "1.1",
-  "description": "This is a lightweight Chrome extension that adds a 'Read with ElevenLabs' button to each ChatGPT response, allowing you to convert ChatGPT text to high-quality speech using ElevenLabs voices (custom or built-in).",
-  "author": "Glen Bland (Waypoint Labs)",
-  "permissions": ["storage", "scripting", "activeTab"],
-  "host_permissions": ["https://chatgpt.com/*", "https://api.elevenlabs.io/*"],
+  "name": "ChatGPT × Irodori",
+  "version": "0.2.0",
+  "description": "Read individual ChatGPT replies aloud with a local Irodori-TTS Server.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://chatgpt.com/*", "http://127.0.0.1/*", "http://localhost/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "icons": {
     "16": "icon16.png",
     "32": "icon32.png",
     "48": "icon48.png",
-    "128": "icon128.png",
-    "256": "icon256.png",
-    "512": "icon512.png"
+    "128": "icon128.png"
   },
   "action": {
     "default_popup": "popup.html",
@@ -20,9 +18,7 @@
       "16": "icon16.png",
       "32": "icon32.png",
       "48": "icon48.png",
-      "128": "icon128.png",
-      "256": "icon256.png",
-      "512": "icon512.png"
+      "128": "icon128.png"
     }
   },
   "background": {

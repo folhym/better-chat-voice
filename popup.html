@@ -1,123 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>Better Chat Voice</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGPT × Irodori</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-
-    <div class="header">
-      <img src="icon.png" alt="Icon" class="icon" />
-      <span class="title">Better Chat Voice</span>
+  <main>
+    <header>
+      <img src="icon32.png" alt="" width="28" height="28">
+      <h1>ChatGPT × Irodori</h1>
+    </header>
+    <label for="serverUrl">Server</label>
+    <input id="serverUrl" type="url" spellcheck="false" value="http://127.0.0.1:8088">
+    <p class="hint">接続確認を押すとURLを保存します。</p>
+    <button id="connect" type="button">接続確認</button>
+    <div class="status-block">
+      <span class="status-label">状態</span>
+      <p id="status" role="status" aria-live="polite">● 確認中</p>
+      <p id="statusDetail" class="hint"></p>
     </div>
-
-    <!-- HOME VIEW -->
-    <section id="view-home" class="view active" role="region" aria-label="Home">
-      <h2 class="subtitle">Text-to-Speech Providers</h2>
-
-      <div class="provider-card">
-        <div>
-          <h3>ElevenLabs</h3>
-          <div class="muted">Fast, expressive voices. (Recommended)</div>
-        </div>
-        <button id="go-elevenlabs" class="btn btn-primary">Configure →</button>
-      </div>
-
-      <div class="provider-card">
-        <div>
-          <h3>Azure Speech</h3>
-          <div class="muted">(Coming Soon)</div>
-        </div>
-        <button id="go-azure" class="btn btn-primary">Configure →</button>
-      </div>
-
-      <div class="provider-card">
-        <div>
-          <h3>Google Gemini TTS</h3>
-          <div class="muted">(Coming Soon)</div>
-        </div>
-        <button id="go-gemini" class="btn btn-primary">Configure →</button>
-      </div>
-
-      <div class="spacer"></div>
-
-      <!-- Keep your links/Ko-fi only on Home -->
-      
-        <div class="footer">Made by Glen Bland.</div>
-
-        <div class="footer">
-          <span>Check out my other projects at</span>
-          <a href="https://waypointlabs.org" target="_blank" rel="noopener">waypointlabs.org</a>
-        </div>
-
-        <div class="footer">
-          <a href="https://ko-fi.com/glenbland" target="_blank" rel="noopener">Buy me a Ko-fi</a>
-        </div>
-
-
-    </section>
-
-    <!-- ELEVENLABS VIEW -->
-    <section id="view-elevenlabs" class="view" role="region" aria-label="ElevenLabs Settings">
-      <div class="row" style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 class="subtitle" style="margin:0;">ElevenLabs Settings</h2>
-        <button id="back-home" class="btn btn-ghost">← Back</button>
-      </div>
-
-      <div class="field">
-        <label for="apiKey">API Key</label>
-        <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
-      </div>
-
-      <div class="actions">
-        <button id="fetchVoices" class="btn btn-ghost">Fetch Voices</button>
-      </div>
-
-      <div class="field">
-        <label for="voiceSelect">Voice</label>
-        <select id="voiceSelect">
-          <option value="">— choose a voice —</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="modelSelect">Model</label>
-        <select id="modelSelect">
-          <option value="eleven_v3" selected>Eleven v3 (recommended)</option>
-          <option value="eleven_multilingual_v2">Multilingual v2</option>
-          <option value="eleven_monolingual_v1">Monolingual v1 (legacy)</option>
-        </select>
-      </div>
-
-      <div class="actions">
-        <button id="save" class="btn btn-primary">Save</button>
-      </div>
-    </section>
-
-    <!-- AZURE PLACEHOLDER -->
-    <section id="view-azure" class="view" role="region" aria-label="Azure Placeholder">
-      <div class="row" style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 class="subtitle" style="margin:0;">Azure Speech</h2>
-        <button class="btn btn-ghost nav-back">← Back</button>
-      </div>
-      <div class="muted">Azure Speech settings will appear here in a future update.</div>
-    </section>
-
-    <!-- GEMINI PLACEHOLDER -->
-    <section id="view-gemini" class="view" role="region" aria-label="Gemini Placeholder">
-      <div class="row" style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 class="subtitle" style="margin:0;">Google Gemini TTS</h2>
-        <button class="btn btn-ghost nav-back">← Back</button>
-      </div>
-      <div class="muted">Gemini TTS settings will appear here in a future update.</div>
-    </section>
-
-    <!-- Shared status line for messages like "Settings saved!" -->
-    <div id="statusMsg" class="muted" style="margin-top:10px;"></div>
-  </div>
-
+    <label for="voiceSelect">Voice</label>
+    <select id="voiceSelect">
+      <option value="">Voiceを選択してください</option>
+    </select>
+    <button id="reloadVoices" class="secondary" type="button">Voice一覧を再読込</button>
+    <label for="speedSelect">読み上げ速度</label>
+    <select id="speedSelect">
+      <option value="0.8">0.8x</option>
+      <option value="0.9">0.9x</option>
+      <option value="1" selected>1.0x</option>
+      <option value="1.1">1.1x</option>
+      <option value="1.2">1.2x</option>
+    </select>
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>
