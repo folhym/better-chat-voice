@@ -52,11 +52,11 @@ test('sends the selected reply and voice to the local speech API', async () => {
   });
 });
 
-test('passes the saved speed and speaker embedding voice ID to Irodori', async () => {
+test('generates at speed 1 despite saved playback speed and keeps the embedding voice ID', async () => {
   let body;
   const message = setup({
     voiceId: '敷嶋てとら_02',
-    speechRate: 1.2,
+    speechRate: 2.5,
     fetch: async (url, options = {}) => {
       if (url.endsWith('/v1/models')) {
         return new Response(JSON.stringify({ data: [{ id: 'irodori-tts' }] }));
@@ -67,7 +67,7 @@ test('passes the saved speed and speaker embedding voice ID to Irodori', async (
   });
   await message({ action: 'tts', requestId: 'speed', payload: '速度テスト' });
   assert.equal(body.voice, '敷嶋てとら_02');
-  assert.equal(body.speed, 1.2);
+  assert.equal(body.speed, 1);
 });
 
 test('reports an unset voice without a network request', async () => {

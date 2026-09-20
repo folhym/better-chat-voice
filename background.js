@@ -70,11 +70,8 @@ async function generateSpeech(text, requestId, tabId) {
   }
   activeRequests.set(key, controller);
   try {
-    const { voiceId, speechRate = 1 } = await chrome.storage.local.get(['voiceId', 'speechRate']);
+    const { voiceId } = await chrome.storage.local.get('voiceId');
     if (!voiceId) throw new Error('VOICE_REQUIRED');
-    const storedSpeed = Number(speechRate);
-    const speed = Number.isFinite(storedSpeed) && storedSpeed >= 0.25 && storedSpeed <= 4
-      ? storedSpeed : 1;
     const baseUrl = await getServerUrl();
     const model = await getModelId(baseUrl, controller.signal);
     const response = await fetch(baseUrl + '/v1/audio/speech', {
@@ -84,7 +81,7 @@ async function generateSpeech(text, requestId, tabId) {
         model,
         input: text,
         voice: voiceId,
-        speed,
+        speed: 1.0,
         response_format: 'mp3'
       }),
       signal: controller.signal

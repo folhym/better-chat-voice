@@ -2,6 +2,7 @@ const DEFAULT_SERVER = 'http://127.0.0.1:8088';
 const serverInput = document.querySelector('#serverUrl');
 const voiceSelect = document.querySelector('#voiceSelect');
 const speedSelect = document.querySelector('#speedSelect');
+const autoReadSelect = document.querySelector('#autoReadSelect');
 const status = document.querySelector('#status');
 const statusDetail = document.querySelector('#statusDetail');
 const connectButton = document.querySelector('#connect');
@@ -83,8 +84,8 @@ async function checkConnectionAndVoices() {
 }
 
 async function loadSettings() {
-  const { serverUrl = DEFAULT_SERVER, voiceId = '', speechRate = 1 } =
-    await chrome.storage.local.get(['serverUrl', 'voiceId', 'speechRate']);
+  const { serverUrl = DEFAULT_SERVER, voiceId = '', speechRate = 1, autoRead = false } =
+    await chrome.storage.local.get(['serverUrl', 'voiceId', 'speechRate', 'autoRead']);
   serverInput.value = serverUrl;
   if (voiceId) {
     voiceSelect.add(new Option(voiceId + '（保存済み）', voiceId));
@@ -93,6 +94,7 @@ async function loadSettings() {
   const rate = String(speechRate);
   speedSelect.value = [...speedSelect.options].some(option => option.value === rate) ? rate : '1';
   if (speedSelect.value !== rate) await chrome.storage.local.set({ speechRate: 1 });
+  autoReadSelect.value = autoRead === true ? 'on' : 'off';
   await checkConnectionAndVoices();
 }
 
@@ -105,6 +107,10 @@ voiceSelect.addEventListener('change', async () => {
 
 speedSelect.addEventListener('change', async () => {
   await chrome.storage.local.set({ speechRate: Number(speedSelect.value) });
+});
+
+autoReadSelect.addEventListener('change', async () => {
+  await chrome.storage.local.set({ autoRead: autoReadSelect.value === 'on' });
 });
 
 reloadButton.addEventListener('click', async () => {

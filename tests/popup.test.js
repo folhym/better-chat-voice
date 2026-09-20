@@ -5,13 +5,16 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
+const popupHtml = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
+const speedOptions = ['0.5', '0.75', '1', '1.25', '1.5', '2', '2.5'];
 
-function setup({ voiceId = 'shiori', speechRate = 1, voices = [{ id: 'shiori' }], health = true,
+function setup({ voiceId = 'shiori', speechRate = 1, autoRead = false,
+  voices = [{ id: 'shiori' }], health = true,
   voiceError = false } = {}) {
-  const data = { serverUrl: 'http://127.0.0.1:8088', voiceId, speechRate };
+  const data = { serverUrl: 'http://127.0.0.1:8088', voiceId, speechRate, autoRead };
   const server = { voices, health, voiceError };
   const elements = {};
-  for (const id of ['serverUrl', 'voiceSelect', 'speedSelect', 'status',
+  for (const id of ['serverUrl', 'voiceSelect', 'speedSelect', 'autoReadSelect', 'status',
     'statusDetail', 'connect', 'reloadVoices']) {
     elements[id] = {
       value: '', textContent: '', dataset: {}, options: [], disabled: false, listeners: {},
@@ -20,8 +23,7 @@ function setup({ voiceId = 'shiori', speechRate = 1, voices = [{ id: 'shiori' }]
       add(option) { this.options.push(option); }
     };
   }
-  elements.speedSelect.options = ['0.8', '0.9', '1', '1.1', '1.2']
-    .map(value => ({ value }));
+  elements.speedSelect.options = speedOptions.map(value => ({ value }));
   const chrome = {
     storage: { local: {
       async get(keys) {
@@ -55,12 +57,12 @@ test('reload keeps the selected embedding voice until it disappears', async () =
   const fixture = setup({
     voiceId: 'embedding',
     voices: [{ id: 'embedding' }, { id: 'shiori' }],
-    speechRate: 0.9
+    speechRate: 0.75
   });
   await fixture.ready;
   assert.equal(fixture.elements.status.textContent, '● 接続OK');
   assert.equal(fixture.elements.voiceSelect.value, 'embedding');
-  assert.equal(fixture.elements.speedSelect.value, '0.9');
+  assert.equal(fixture.elements.speedSelect.value, '0.75');
   fixture.server.voices = [{ id: 'shiori' }, { id: 'embedding' }];
   await fixture.elements.reloadVoices.listeners.click();
   assert.equal(fixture.elements.voiceSelect.value, 'embedding');
@@ -85,9 +87,29 @@ test('popup distinguishes disconnected, no voices, and voice API failure', async
 });
 
 test('speed selection is persisted', async () => {
+  const actualOptions = [...popupHtml.matchAll(/<option value="([^"]+)"(?:\s+selected)?>[^<]+x<\/option>/g)]
+    .map(match => match[1]);
+  assert.deepEqual(actualOptions, speedOptions);
   const fixture = setup();
   await fixture.ready;
-  fixture.elements.speedSelect.value = '1.2';
+  assert.equal(fixture.elements.speedSelect.value, '1');
+  fixture.elements.speedSelect.value = '2.5';
   await fixture.elements.speedSelect.listeners.change();
-  assert.equal(fixture.data.speechRate, 1.2);
+  assert.equal(fixture.data.speechRate, 2.5);
+  const reopened = setup({ speechRate: fixture.data.speechRate });
+  await reopened.ready;
+  assert.equal(reopened.elements.speedSelect.value, '2.5');
+});
+
+test('automatic reading defaults OFF and is saved across popup openings', async () => {
+  const fixture = setup();
+  await fixture.ready;
+  assert.match(popupHtml, /id="autoReadSelect"/);
+  assert.equal(fixture.elements.autoReadSelect.value, 'off');
+  fixture.elements.autoReadSelect.value = 'on';
+  await fixture.elements.autoReadSelect.listeners.change();
+  assert.equal(fixture.data.autoRead, true);
+  const reopened = setup({ autoRead: fixture.data.autoRead });
+  await reopened.ready;
+  assert.equal(reopened.elements.autoReadSelect.value, 'on');
 });

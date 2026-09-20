@@ -1,671 +1,1755 @@
 diff --git a/PRIVACY.md b/PRIVACY.md
-index 3c59383..5a8f5d0 100644
+index 5a8f5d0..8311f6e 100644
 --- a/PRIVACY.md
 +++ b/PRIVACY.md
-@@ -2,6 +2,6 @@
+@@ -1,7 +1,9 @@
+ # Privacy
  
- This extension reads only the ChatGPT assistant reply whose Irodori button you click. It sends that reply to the Irodori-TTS Server URL you configured, then plays the returned audio in the browser.
+-This extension reads only the ChatGPT assistant reply whose Irodori button you click. It sends that reply to the Irodori-TTS Server URL you configured, then plays the returned audio in the browser.
++This extension reads the ChatGPT assistant reply whose Irodori button you click. If you turn on automatic reading (off by default), it also sends newly completed assistant replies to your configured Irodori-TTS Server URL. It plays the returned audio in the browser.
  
--The server URL and selected voice ID are stored in Chrome local storage. No API keys, OpenAI API calls, ElevenLabs calls, analytics, or telemetry are used by this extension.
-+The server URL, selected voice ID, and speech rate are stored in Chrome local storage. No API keys, OpenAI API calls, ElevenLabs calls, analytics, or telemetry are used by this extension.
+-The server URL, selected voice ID, and speech rate are stored in Chrome local storage. No API keys, OpenAI API calls, ElevenLabs calls, analytics, or telemetry are used by this extension.
++The server URL, selected voice ID, speech rate, and automatic reading setting are stored in Chrome local storage. No API keys, OpenAI API calls, ElevenLabs calls, analytics, or telemetry are used by this extension.
  
- If you configure a server on another host, Chrome asks for access to that host. The reply text is then transmitted to that configured host when you click its read button.
+-If you configure a server on another host, Chrome asks for access to that host. The reply text is then transmitted to that configured host when you click its read button.
++Generated audio is kept only in the current page's memory for replay. It is released when regenerated, when its answer is removed, or when the page closes. The extension does not save audio files or use persistent audio storage.
++
++If you configure a server on another host, Chrome asks for access to that host. Reply text is then transmitted to that configured host when you click its read button or when automatic reading is on and a new reply completes.
 diff --git a/README.md b/README.md
-index 6df3139..880245e 100644
+index 880245e..f41b241 100644
 --- a/README.md
 +++ b/README.md
-@@ -1,47 +1,62 @@
--# ChatGPT × Irodori v0.1
-+# ChatGPT × Irodori v0.2
+@@ -1,6 +1,6 @@
+-# ChatGPT × Irodori v0.2
++# ChatGPT × Irodori v0.3.2
  
--ChatGPT Web の各回答に「🔊 Irodori」ボタンを追加し、選んだ回答の本文をローカルの Irodori-TTS Server で音声化する Chrome 拡張です。[Better Chat Voice](https://github.com/G1enB1and/better-chat-voice) をベースにしています。外部の有料 TTS API と API キーは不要です。
-+ChatGPT Web の assistant 回答を、ローカルの Irodori-TTS Server で音声に変換して再生する Chrome 拡張です。読み上げたい回答の「🔊 Irodori」を押して使います。OpenAI API、ElevenLabs、有料 TTS API、Python Bridge は使いません。
+-ChatGPT Web の assistant 回答を、ローカルの Irodori-TTS Server で音声に変換して再生する Chrome 拡張です。読み上げたい回答の「🔊 Irodori」を押して使います。OpenAI API、ElevenLabs、有料 TTS API、Python Bridge は使いません。
++ChatGPT Web の assistant 回答を、ローカルの Irodori-TTS Server で音声に変換して再生する Chrome 拡張です。回答ごとの「🔊 Irodori」で手動再生でき、自動読み上げを ON にすると新しい回答の完成後に再生します。OpenAI API、ElevenLabs、有料 TTS API、Python Bridge は使いません。
+ 
+ [Better Chat Voice](https://github.com/G1enB1and/better-chat-voice) を基にした Manifest V3 拡張です。元プロジェクトのライセンスは [LICENSE (MIT).md](LICENSE%20(MIT).md) を参照してください。
+ 
+@@ -18,14 +18,14 @@ ChatGPT Web の assistant 回答を、ローカルの Irodori-TTS Server で音
+ 2. Chrome で `chrome://extensions` を開き、右上の「デベロッパー モード」を有効にします。
+ 3. 「パッケージ化されていない拡張機能を読み込む」を押し、この `chatgpt-irodori-voice` フォルダーを選びます。
+ 4. 拡張の popup で Server URL を確認し、「接続確認」を押します。
+-5. Voice を選択し、必要なら読み上げ速度を変更します。
++5. Voice を選択し、必要なら読み上げ速度と自動読み上げを設定します。
+ 6. `https://chatgpt.com/` を開き、assistant 回答の「🔊 Irodori」を押します。
+ 
+ 拡張のファイルを更新した後は `chrome://extensions` で拡張を再読み込みし、ChatGPT のタブも再読み込みしてください。
+ 
+ ## 設定
+ 
+-popup には Server URL、接続状態、Voice、Voice 一覧の再読込、読み上げ速度を表示します。Server URL、Voice、速度は Chrome Storage に保存されます。
++popup には Server URL、接続状態、Voice、Voice 一覧の再読込、読み上げ速度、自動読み上げ ON/OFF を表示します。これらの設定は Chrome Storage に保存されます。
+ 
+ 「接続確認」は Server への接続確認後に Voice 一覧も更新します。「Voice一覧を再読込」は、Server 起動後に `voices/` へ Voice を追加したときに使います。現在の Voice が一覧に残っていれば選択を維持し、一覧から消えた場合だけ未選択にします。Voice 一覧が取得できない場合、保存済みの選択は消しません。
+ 
+@@ -42,11 +42,23 @@ Irodori-TTS Server が Voice API で返す ID をそのまま選択できます
+ 
+ ### 読み上げ速度
+ 
+-`0.8x`、`0.9x`、`1.0x`、`1.1x`、`1.2x` から選べます。初期値は `1.0x` です。選択値は音声生成時に Irodori-TTS Server の正式な `/v1/audio/speech` の `speed` パラメータとして送ります。ブラウザの `audio.playbackRate` は使いません。Irodori の [API 実装](https://github.com/Aratako/Irodori-TTS-Server/blob/main/src/irodori_openai_tts/app.py)で速度指定を確認しています。
++`0.5x`、`0.75x`、`1.0x`、`1.25x`、`1.5x`、`2.0x`、`2.5x` から選べます。初期値は `1.0x` です。旧候補の速度を保存していた場合は、popup を開くと 1.0x に戻ります。Irodori への音声生成リクエストは常に `speed: 1.0` とし、選択した速度はブラウザの `audio.playbackRate` に適用します。ブラウザが対応する場合は `preservesPitch` も有効にします。再生中に popup で速度を変えると現在の音声にも反映されます。
 +
-+[Better Chat Voice](https://github.com/G1enB1and/better-chat-voice) を基にした Manifest V3 拡張です。元プロジェクトのライセンスは [LICENSE (MIT).md](LICENSE%20(MIT).md) を参照してください。
- 
- ## 必要環境
- 
--- Google Chrome
--- ChatGPT アカウント（通常の ChatGPT Web 利用）
--- [Irodori-TTS Server](https://github.com/Aratako/Irodori-TTS-Server)
--- MP3 出力を使うため、Irodori 側に FFmpeg が必要です。
-+- Google Chrome と ChatGPT アカウント
-+- [Irodori-TTS Server](https://github.com/Aratako/Irodori-TTS-Server) が起動済みの PC
-+- Irodori-TTS Server が必要とするモデル、Voice、FFmpeg 等の実行環境
++### 自動読み上げ
 +
-+拡張から Server を起動・停止する機能はありません。Server は別途起動してください。標準接続先は `http://127.0.0.1:8088` です。
++初期値は OFF です。ON に切り替えた後に新しく現れた assistant 回答だけを対象にします。拡張やページの読み込み時に表示済みの過去回答、OFF 中の回答を遡って読み上げることはありません。本文が最後の変更から約1.5秒間安定すると Irodori へ1回送ります。ChatGPT が生成中属性や「生成を中止する」ボタンを表示している間は待機します。これらの情報がない場合も本文の安定で判定します。Voice が未設定の場合は自動送信しません。
 +
-+## Chrome への導入と起動順
++複数の回答が続けて完成すると、完成順に音声を生成して再生を待ちます。現在の音声の終了後、または Stop 後に次の音声を再生します。Pause 中は次に進みません。回答ボタンの手動操作は自動再生より優先されます。OFF に戻すと未再生の自動待ち行列を破棄し、再生中の音声はそのまま続きます。自動生成した音声もページ内メモリに残り、「▶ 再生」で再生成せずに聞き直せます。
 +
-+1. Irodori-TTS Server を起動します。環境に `start_server.bat` または `start_server_hidden.vbs` がある場合は、その設定に従って起動します。
-+2. Chrome で `chrome://extensions` を開き、右上の「デベロッパー モード」を有効にします。
-+3. 「パッケージ化されていない拡張機能を読み込む」を押し、この `chatgpt-irodori-voice` フォルダーを選びます。
-+4. 拡張の popup で Server URL を確認し、「接続確認」を押します。
-+5. Voice を選択し、必要なら読み上げ速度を変更します。
-+6. `https://chatgpt.com/` を開き、assistant 回答の「🔊 Irodori」を押します。
++左側の履歴などから別のチャットを開いた場合、読み込まれる過去回答は自動読み上げしません。会話切替前の未処理の自動生成・待ち行列を解除し、再生中の音声も停止します。過去回答の読み込みが約1.5秒間落ち着いた後、そのチャットで新たに質問して得た回答は通常どおり自動読み上げできます。新規チャットの最初の質問でURLが割り当てられる場合も、その回答は自動読み上げ対象です。
+ 
+ ## 読み上げ
+ 
+-回答ごとの「🔊 Irodori」を押すと、その回答の全文を 1 回のリクエストで Server に送ります。再生中または生成中は「■ Stop」を押すと停止します。別の回答を押すと現在の生成・再生を止め、新しい回答に切り替えます。自動読み上げや音声ストリーミングはありません。
++回答ごとの「🔊 Irodori」を押すと、その回答の全文を 1 回のリクエストで Server に送ります。生成中の「■ Stop」は通信をキャンセルします。再生中は「⏸ 一時停止」と「■ 停止」を表示します。「▶ 再開」は同じ音声の停止位置から再開します。「■ 停止」は再生を止めて先頭へ戻し、生成済み音声を保持します。
 +
-+拡張のファイルを更新した後は `chrome://extensions` で拡張を再読み込みし、ChatGPT のタブも再読み込みしてください。
++再生終了または停止後は「▶ 再生」と「↻ 再生成」を表示します。「▶ 再生」は保持した音声を先頭から再生し、Server への再リクエストは行いません。「↻ 再生成」は古い音声を破棄して Server に新しく生成を依頼します。別の回答に切り替えると再生中の音声だけが止まり、各回答の生成済み音声は残ります。Voice、Server、回答本文を変更した後に新しい音声が必要な場合は「↻ 再生成」を押してください。
 +
-+## 設定
++生成済み音声は現在のページのメモリ内だけに保持します。回答が画面から削除されると破棄し、ページ再読み込みやタブ終了後には復元しません。ファイル、IndexedDB、localStorage への音声保存は行いません。音声ストリーミングはありません。
  
--## Chrome への導入
-+popup には Server URL、接続状態、Voice、Voice 一覧の再読込、読み上げ速度を表示します。Server URL、Voice、速度は Chrome Storage に保存されます。
+ 読み上げ前に、コードブロック、URL、citation や source の操作 UI、コピー等のボタン、非表示要素を可能な範囲で除外します。Markdown の見出し・強調・箇条書き・インラインコードの記号は取り除き、本文や表示用リンク名は残します。段落と見出しの区切りも残します。ChatGPT の DOM 変更によって citation 等の新しい表示形式が現れた場合は、除外しきれないことがあります。
  
--1. Chrome で \`chrome://extensions\` を開く。
--2. 「デベロッパー モード」を有効にする。
--3. 「パッケージ化されていない拡張機能を読み込む / Load unpacked」で、この \`chatgpt-irodori-voice\` フォルダを選ぶ。
--4. 拡張アイコンから設定画面を開く。
-+「接続確認」は Server への接続確認後に Voice 一覧も更新します。「Voice一覧を再読込」は、Server 起動後に `voices/` へ Voice を追加したときに使います。現在の Voice が一覧に残っていれば選択を維持し、一覧から消えた場合だけ未選択にします。Voice 一覧が取得できない場合、保存済みの選択は消しません。
- 
--## 起動と操作
-+Irodori-TTS Server が Voice API で返す ID をそのまま選択できます。`.speaker.safetensors` の Speaker Embedding Voice も通常の Voice と同じように表示、保存、送信します。専用設定はありません。
- 
--1. Irodori-TTS Server を起動する。既定の接続先は \`http://127.0.0.1:8088\`。
--2. Chrome を起動し、拡張機能を有効にする。
--3. 設定画面で「接続確認」を押し、Voice を選ぶ。Voice 選択は自動保存される。
--4. \`https://chatgpt.com/\` を開く。既に開いていた場合はページを再読み込みする。
--5. 任意の GPT 回答の「🔊 Irodori」を押す。生成中・再生中に同じボタンの「■ Stop」を押すと停止する。別の回答を押すと前の処理が停止する。
-+状態表示は次のとおりです。
- 
--Server URL を変えた場合は「接続確認」を押して保存してください。別ホストへの変更時だけ、そのホストへのアクセス許可を Chrome が求めます。既定の \`127.0.0.1\` と \`localhost\` は任意のポートで利用できます。
-+| 表示 | 意味 |
-+| --- | --- |
-+| 接続OK | Server と Voice API に接続できた |
-+| Server未接続 | Server に接続できない。起動と URL を確認する |
-+| 接続OK / Voiceなし | Server は動作中だが Voice 一覧が空 |
-+| 接続OK / Voice取得失敗 | Server に接続できたが Voice API に失敗した |
- 
--Voice が一覧に出ない場合は、Irodori 側の \`voices/\` に参照音声を置いてください。Irodori の設定で \`none\` が有効なら、サーバーが返す一覧から選べます。Voice 一覧が取得できない時も拡張は動作を継続し、保存済み Voice があれば維持します。
-+### 読み上げ速度
- 
--## 仕組み
-+`0.8x`、`0.9x`、`1.0x`、`1.1x`、`1.2x` から選べます。初期値は `1.0x` です。選択値は音声生成時に Irodori-TTS Server の正式な `/v1/audio/speech` の `speed` パラメータとして送ります。ブラウザの `audio.playbackRate` は使いません。Irodori の [API 実装](https://github.com/Aratako/Irodori-TTS-Server/blob/main/src/irodori_openai_tts/app.py)で速度指定を確認しています。
- 
--回答本文からコードブロックと操作 UI を除き、全文を一度だけ service worker へ渡します。service worker が \`GET /v1/models\` で model ID を取得し、\`POST /v1/audio/speech\` に \`input\`、\`voice\`、\`response_format: "mp3"\` を送ります。音声全体を受信後、ページ内の単一プレイヤーで再生します。ブラウザ側で文章を分割しません。
-+## 読み上げ
- 
--設定画面は \`GET /health\` で接続を確認し、\`GET /v1/audio/voices\` で Voice を取得します。通信は service worker から行うため、Irodori 側の追加 CORS 設定や Python Bridge は通常不要です。[Chrome の拡張ネットワーク仕様](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests/)に従い、既定ホストは manifest 権限、変更先は[任意ホスト権限](https://developer.chrome.com/docs/extensions/reference/api/permissions/)を使います。
-+回答ごとの「🔊 Irodori」を押すと、その回答の全文を 1 回のリクエストで Server に送ります。再生中または生成中は「■ Stop」を押すと停止します。別の回答を押すと現在の生成・再生を止め、新しい回答に切り替えます。自動読み上げや音声ストリーミングはありません。
- 
--Irodori の API 形式は[公式 README](https://github.com/Aratako/Irodori-TTS-Server#api)を基準にしています。Irodori 側で独自の Bearer 認証を有効にした構成は v0.1 の対象外です。
-+読み上げ前に、コードブロック、URL、citation や source の操作 UI、コピー等のボタン、非表示要素を可能な範囲で除外します。Markdown の見出し・強調・箇条書き・インラインコードの記号は取り除き、本文や表示用リンク名は残します。段落と見出しの区切りも残します。ChatGPT の DOM 変更によって citation 等の新しい表示形式が現れた場合は、除外しきれないことがあります。
- 
--## 制限
-+## 接続方式
- 
--- 自動読み上げ、SSE、ブラウザ側 chunk 分割、音声キャッシュはありません。
--- Irodori の音声生成が非常に長い場合、Chrome の service worker の実行制限や拡張メッセージのサイズ制限に影響される可能性があります。
--- ChatGPT の DOM が変わるとボタン表示や本文抽出を調整する必要があります。
-+`content.js` が assistant 回答を取得し、`background.js` の service worker がローカル Irodori-TTS Server に直接 HTTP リクエストを送ります。Server URL を標準接続先以外へ変える場合は、接続確認時に Chrome のホストアクセス許可を求めます。音声データは ChatGPT のページで再生します。
- 
--## ライセンスと出典
-+## 制約
- 
--元プロジェクトの MIT ライセンスは [LICENSE (MIT).md](LICENSE%20(MIT).md) を参照してください。アイコンと初期の拡張構成は Better Chat Voice 由来です。
-+- Irodori-TTS Server の起動、Voice とモデルの設定は別途必要です。
-+- 長文はブラウザ側で分割しません。生成完了まで再生は始まりません。
-+- 非常に長い音声では、拡張メッセージを通じた音声データ転送に時間とメモリがかかる可能性があります。
-+- Server で独自の認証を有効にした構成には未対応です。
 diff --git a/background.js b/background.js
-index 1f72a2e..0e98472 100644
+index 0e98472..162ca4a 100644
 --- a/background.js
 +++ b/background.js
-@@ -70,8 +70,11 @@ async function generateSpeech(text, requestId, tabId) {
+@@ -70,11 +70,8 @@ async function generateSpeech(text, requestId, tabId) {
    }
    activeRequests.set(key, controller);
    try {
--    const { voiceId } = await chrome.storage.local.get('voiceId');
-+    const { voiceId, speechRate = 1 } = await chrome.storage.local.get(['voiceId', 'speechRate']);
+-    const { voiceId, speechRate = 1 } = await chrome.storage.local.get(['voiceId', 'speechRate']);
++    const { voiceId } = await chrome.storage.local.get('voiceId');
      if (!voiceId) throw new Error('VOICE_REQUIRED');
-+    const storedSpeed = Number(speechRate);
-+    const speed = Number.isFinite(storedSpeed) && storedSpeed >= 0.25 && storedSpeed <= 4
-+      ? storedSpeed : 1;
+-    const storedSpeed = Number(speechRate);
+-    const speed = Number.isFinite(storedSpeed) && storedSpeed >= 0.25 && storedSpeed <= 4
+-      ? storedSpeed : 1;
      const baseUrl = await getServerUrl();
      const model = await getModelId(baseUrl, controller.signal);
      const response = await fetch(baseUrl + '/v1/audio/speech', {
-@@ -81,6 +84,7 @@ async function generateSpeech(text, requestId, tabId) {
+@@ -84,7 +81,7 @@ async function generateSpeech(text, requestId, tabId) {
          model,
          input: text,
          voice: voiceId,
-+        speed,
+-        speed,
++        speed: 1.0,
          response_format: 'mp3'
        }),
        signal: controller.signal
 diff --git a/content.js b/content.js
-index d0449d5..7541c0e 100644
+index 7541c0e..5f35b4a 100644
 --- a/content.js
 +++ b/content.js
-@@ -4,9 +4,13 @@ let sequence = 0;
+@@ -1,7 +1,40 @@
+ // Better Chat Voice's per-reply button and Audio playback flow, adapted for Irodori.
+-let activeSession = null;
++const audioStates = new Map();
++let activeState = null;
+ let sequence = 0;
  let scanScheduled = false;
- 
- const SKIP_SELECTOR = [
--  'pre', 'button', '[role="button"]', 'nav', 'svg', 'script', 'style',
-+  'pre', 'button', '[role="button"]', 'nav', 'aside', 'footer', 'svg', 'script', 'style',
-   '[hidden]', '[aria-hidden="true"]', '.sr-only',
--  '[data-testid*="citation"]', 'sup', '.irodori-action'
-+  '[data-testid*="citation"]', '[data-testid*="sources"]',
-+  '[data-testid*="reference"]', 'a[data-testid*="source"]',
-+  '[data-citation]', '[data-source-chip]',
-+  '[aria-label^="Citation"]', '[aria-label^="Source"]',
-+  'sup', '.irodori-action'
- ].join(',');
- const BLOCK_TAGS = new Set([
-   'DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI',
-@@ -43,10 +47,29 @@ function extractReplyText(root) {
-     const block = BLOCK_TAGS.has(element.tagName);
-     if (block) chunks.push('\n');
-     for (const child of element.childNodes) visit(child);
--    if (block) chunks.push('\n');
-+    if (block && element.tagName !== 'LI') chunks.push('\n');
-   }
-   visit(root);
--  return chunks.join('')
-+  return chunks.join('');
++let autoReadEnabled = false;
++let autoSettingsReady = false;
++let autoSettingChanged = false;
++let autoGeneratingState = null;
++const autoQueue = [];
++const baselineTurnIds = new Set();
++const handledTurnIds = new Set();
++const baselineTurns = new WeakSet();
++const AUTO_STABLE_MS = 1500;
++const NAVIGATION_STABLE_MS = 1500;
++const AUTO_DEBUG = true; // Set to false after confirming behavior in Chrome.
++const ASSISTANT_SELECTOR = '[data-message-author-role="assistant"], [data-turn-role="assistant"], [data-message-role="assistant"]';
++let routeKey = location.pathname;
++let navigationHydrating = false;
++let navigationTimer = null;
++let navigationSignature = null;
++let newChatSubmissionAt = 0;
++
++function autoLog(stage, state) {
++  if (AUTO_DEBUG) console.info('[Irodori Auto] ' + stage, turnId(state.turn) || 'unknown');
 +}
 +
-+function sanitizeForSpeech(text) {
-+  return text
-+    // ChatGPT usually renders Markdown; this also handles raw Markdown text.
-+    .replace(/(^|\n)\s*\x60{3}[\s\S]*?\x60{3}(?=\n|$)/g, '\n')
-+    .replace(/!?\[([^\]]+)\]\([^)]+\)/g, '$1')
-+    .replace(/(^|\n)[ \t]{0,3}#{1,6}[ \t]+/g, '$1')
-+    .replace(/(^|\n)[ \t]*>[ \t]?/g, '$1')
-+    .replace(/(^|\n)[ \t]*[-*+][ \t]+/g, '$1')
-+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
-+    .replace(/__([^_\n]+)__/g, '$1')
-+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1')
-+    .replace(/\x60+([^\x60\n]+)\x60+/g, '$1')
-+    .replace(/\b(?:https?:\/\/|www\.)[^\s<>"'\x60「」]+/gi, match => {
-+      // Preserve sentence punctuation following a URL.
-+      return match.match(/[.,!?;:、。！？，）)\]]+$/u)?.[0] || '';
-+    })
-+    .replace(/(^|\n)[ \t]*[。.,!?！？，]+[ \t]*(?=\n|$)/g, '$1')
-     .replace(/\u00a0/g, ' ')
-     .replace(/[ \t]+\n/g, '\n')
-     .replace(/\n[ \t]+/g, '\n')
-@@ -97,7 +120,7 @@ async function readReply(button, turn) {
-     return;
++function navigationLog(stage) {
++  if (AUTO_DEBUG) console.info('[Irodori Auto] ' + stage);
++}
++
++function noteNewChatSubmission(event) {
++  if (routeKey !== '/' || !event.target?.querySelector?.(
++    'textarea[name="prompt"], #prompt-textarea, [data-testid="composer-text-input"]'
++  )) return;
++  newChatSubmissionAt = Date.now();
++}
+ 
+ const SKIP_SELECTOR = [
+   'pre', 'button', '[role="button"]', 'nav', 'aside', 'footer', 'svg', 'script', 'style',
+@@ -19,9 +52,33 @@ const BLOCK_TAGS = new Set([
+ 
+ function assistantTurns() {
+   // Semantic roles cover desktop and mobile ChatGPT turn wrappers.
+-  const selector = '[data-message-author-role="assistant"], [data-turn-role="assistant"], [data-message-role="assistant"]';
+-  return [...document.querySelectorAll(selector)]
+-    .filter(turn => !turn.parentElement?.closest(selector));
++  return [...document.querySelectorAll(ASSISTANT_SELECTOR)]
++    .filter(turn => !turn.parentElement?.closest(ASSISTANT_SELECTOR));
++}
++
++function turnId(turn) {
++  return turn.getAttribute?.('data-message-id') || turn.id || null;
++}
++
++function isBaseline(turn) {
++  const id = turnId(turn);
++  return baselineTurns.has(turn) || !!id && baselineTurnIds.has(id);
++}
++
++function markTurnBaseline(turn) {
++  baselineTurns.add(turn);
++  const id = turnId(turn);
++  if (id) baselineTurnIds.add(id);
++  const state = audioStates.get(turn);
++  if (state) {
++    state.autoEligible = false;
++    clearTimeout(state.autoTimer);
++    state.autoTimer = null;
++  }
++}
++
++function markExistingTurns() {
++  for (const turn of assistantTurns()) markTurnBaseline(turn);
+ }
+ 
+ function messageBody(turn) {
+@@ -78,31 +135,78 @@ function sanitizeForSpeech(text) {
+     .trim();
+ }
+ 
+-function setButton(button, busy) {
+-  button.textContent = busy ? '■ Stop' : '🔊 Irodori';
+-  button.setAttribute('aria-label', busy ? 'Irodori の読み上げを停止' : 'Irodori で読み上げ');
++const PLAYBACK_RATES = new Set([0.5, 0.75, 1, 1.25, 1.5, 2, 2.5]);
++
++function applyPlaybackRate(audio, value) {
++  const rate = Number(value);
++  audio.playbackRate = PLAYBACK_RATES.has(rate) ? rate : 1;
++  if ('preservesPitch' in audio) audio.preservesPitch = true;
+ }
+ 
+-function showStatus(button, message) {
+-  const status = button.parentElement?.querySelector('.irodori-status');
+-  if (status) status.textContent = message;
++function setVisible(button, visible) {
++  button.hidden = !visible;
++  button.style.display = visible ? '' : 'none';
+ }
+ 
+-function stopActive() {
+-  const session = activeSession;
+-  if (!session) return;
+-  activeSession = null;
+-  chrome.runtime.sendMessage({ action: 'cancel', requestId: session.requestId }, () => {
+-    void chrome.runtime.lastError;
+-  });
+-  if (session.audio) {
+-    session.audio.pause();
+-    session.audio.removeAttribute('src');
+-    session.audio.load();
++function renderState(state) {
++  const { button, pauseButton, regenerateButton, status } = state;
++  button.textContent = status === 'idle' || status === 'error' ? '🔊 Irodori' :
++    status === 'generating' ? '■ Stop' :
++    status === 'ready' ? '▶ 再生' : '■ 停止';
++  button.setAttribute('aria-label', status === 'idle' || status === 'error' ?
++    'Irodori で読み上げ' : status === 'ready' ?
++      '生成済み音声を再生' : 'Irodori の読み上げを停止');
++  setVisible(pauseButton, status === 'playing' || status === 'paused');
++  pauseButton.textContent = status === 'paused' ? '▶ 再開' : '⏸ 一時停止';
++  pauseButton.setAttribute('aria-label', status === 'paused' ?
++    'Irodori の読み上げを再開' : 'Irodori の読み上げを一時停止');
++  setVisible(regenerateButton, status === 'ready');
++}
++
++function showStatus(state, message) {
++  state.statusElement.textContent = message;
++}
++
++function resumeAutoQueueSoon() {
++  setTimeout(() => {
++    processAutoGeneration();
++    pumpAutoPlayback();
++  }, 150);
++}
++
++function stopState(state, advanceQueue = true) {
++  const wasActive = activeState === state;
++  if (state.status === 'generating' && state.requestId) {
++    chrome.runtime.sendMessage({ action: 'cancel', requestId: state.requestId }, () => {
++      void chrome.runtime.lastError;
++    });
++  }
++  if (state.audio && (state.status === 'playing' || state.status === 'paused')) {
++    state.audio.pause();
++    state.audio.currentTime = 0;
++  }
++  state.requestId = null;
++  state.status = state.audio ? 'ready' : 'idle';
++  if (wasActive) activeState = null;
++  if (autoGeneratingState === state) autoGeneratingState = null;
++  renderState(state);
++  showStatus(state, '');
++  if (advanceQueue && wasActive) resumeAutoQueueSoon();
++}
++
++function discardAudio(state) {
++  if (state.audio) {
++    state.audio.onended = null;
++    state.audio.onerror = null;
++    state.audio.pause();
++    state.audio.removeAttribute('src');
++    state.audio.load();
++    state.audio = null;
++  }
++  if (state.url) {
++    URL.revokeObjectURL(state.url);
++    state.url = null;
    }
-   stopActive();
--  const text = extractReplyText(messageBody(turn));
-+  const text = sanitizeForSpeech(extractReplyText(messageBody(turn)));
+-  if (session.url) URL.revokeObjectURL(session.url);
+-  setButton(session.button, false);
+-  showStatus(session.button, '');
+ }
+ 
+ function sendMessage(message) {
+@@ -114,82 +218,427 @@ function sendMessage(message) {
+   });
+ }
+ 
+-async function readReply(button, turn) {
+-  if (activeSession?.button === button) {
+-    stopActive();
+-    return;
++async function playCached(state, fromStart, autoPlayback = false) {
++  if (!state.audio) return;
++  if (activeState && activeState !== state) stopState(activeState, false);
++  const audio = state.audio;
++  activeState = state;
++  state.status = 'playing';
++  renderState(state);
++  showStatus(state, '再生中');
++  let speechRate = 1;
++  try {
++    ({ speechRate = 1 } = await chrome.storage.local.get('speechRate'));
++  } catch (error) {
++    console.error('[Irodori] Playback speed load failed:', error);
++  }
++  if (activeState !== state || state.status !== 'playing' || state.audio !== audio) return;
++  try {
++    applyPlaybackRate(audio, speechRate);
++    if (fromStart) audio.currentTime = 0;
++    await audio.play();
++    if (autoPlayback && activeState === state) autoLog('playing', state);
++    processAutoGeneration();
++  } catch (error) {
++    if (activeState !== state || state.status === 'paused' ||
++        error?.name === 'AbortError' && !audio.paused) return;
++    console.error('[Irodori] Playback failed:', error);
++    stopState(state);
++    showStatus(state, '音声を再生できませんでした。');
+   }
+-  stopActive();
+-  const text = sanitizeForSpeech(extractReplyText(messageBody(turn)));
++}
++
++async function generateReply(state, auto = false) {
++  const text = sanitizeForSpeech(extractReplyText(messageBody(state.turn)));
    if (!text) {
-     showStatus(button, '読み上げる本文がありません。');
-     return;
+-    showStatus(button, '読み上げる本文がありません。');
+-    return;
++    if (!auto) showStatus(state, '読み上げる本文がありません。');
++    return false;
++  }
++  if (!auto) {
++    if (activeState && activeState !== state) stopState(activeState, false);
++    if (autoGeneratingState && autoGeneratingState !== state) {
++      stopState(autoGeneratingState, false);
++    }
+   }
+-  const session = { button, requestId: String(Date.now()) + '-' + ++sequence, audio: null, url: null };
+-  activeSession = session;
+-  setButton(button, true);
+-  showStatus(button, '音声生成中…');
++  discardAudio(state);
++  const requestId = String(Date.now()) + '-' + ++sequence;
++  state.requestId = requestId;
++  state.status = 'generating';
++  if (!auto) activeState = state;
++  renderState(state);
++  showStatus(state, auto ? '' : '音声生成中…');
+   try {
+-    const response = await sendMessage({ action: 'tts', requestId: session.requestId, payload: text });
+-    if (activeSession !== session) return;
++    const response = await sendMessage({ action: 'tts', requestId, payload: text });
++    if (state.requestId !== requestId || !auto && activeState !== state) return false;
+     if (response?.error) {
+-      if (response.error === 'VOICE_REQUIRED') {
+-        showStatus(button, 'Voiceを選択してください。');
+-      } else if (response.error === 'CONNECTION') {
+-        showStatus(button, 'Irodori-TTS Serverに接続できません。起動を確認してください。');
+-      } else if (response.error === 'PERMISSION_REQUIRED') {
+-        showStatus(button, '設定画面でServerへのアクセスを許可してください。');
+-      } else {
+-        showStatus(button, '音声生成に失敗しました。');
+-      }
+-      activeSession = null;
+-      setButton(button, false);
+-      return;
++      const message = response.error === 'VOICE_REQUIRED' ? 'Voiceを選択してください。' :
++        response.error === 'CONNECTION' ?
++          'Irodori-TTS Serverに接続できません。起動を確認してください。' :
++          response.error === 'PERMISSION_REQUIRED' ?
++            '設定画面でServerへのアクセスを許可してください。' : '音声生成に失敗しました。';
++      state.status = 'error';
++      state.requestId = null;
++      if (activeState === state) activeState = null;
++      renderState(state);
++      showStatus(state, auto ? '' : message);
++      if (!auto) resumeAutoQueueSoon();
++      return false;
+     }
+     if (!Array.isArray(response?.audioBuffer)) throw new Error('No audio data');
+     const blob = new Blob([new Uint8Array(response.audioBuffer)], {
+       type: response.mimeType || 'audio/mpeg'
+     });
+-    session.url = URL.createObjectURL(blob);
+-    session.audio = new Audio(session.url);
+-    session.audio.onended = () => {
+-      if (activeSession === session) stopActive();
++    state.url = URL.createObjectURL(blob);
++    state.audio = new Audio(state.url);
++    const audio = state.audio;
++    audio.onended = () => {
++      if (state.audio !== audio || activeState !== state) return;
++      activeState = null;
++      state.status = 'ready';
++      renderState(state);
++      showStatus(state, '');
++      pumpAutoPlayback();
+     };
+-    session.audio.onerror = () => {
+-      if (activeSession === session) {
+-        stopActive();
+-        showStatus(button, '音声を再生できませんでした。');
+-      }
++    audio.onerror = () => {
++      if (state.audio !== audio) return;
++      if (activeState === state) activeState = null;
++      discardAudio(state);
++      state.status = 'error';
++      renderState(state);
++      showStatus(state, '音声を再生できませんでした。');
++      pumpAutoPlayback();
+     };
+-    showStatus(button, '再生中');
+-    await session.audio.play();
++    state.requestId = null;
++    state.status = 'ready';
+   } catch (error) {
+-    if (activeSession !== session) return;
+-    console.error('[Irodori] Playback or messaging failed:', error);
+-    stopActive();
+-    showStatus(button, '音声生成または再生に失敗しました。');
++    if (state.requestId !== requestId || !auto && activeState !== state) return false;
++    console.error('[Irodori] Speech generation failed:', error);
++    discardAudio(state);
++    state.requestId = null;
++    state.status = 'error';
++    if (activeState === state) activeState = null;
++    renderState(state);
++    showStatus(state, auto ? '' : '音声生成に失敗しました。');
++    if (!auto) resumeAutoQueueSoon();
++    return false;
++  }
++  if (auto) {
++    renderState(state);
++    showStatus(state, '');
++  } else {
++    await playCached(state, true);
++  }
++  return true;
++}
++
++function removeQueuedAuto(state) {
++  const index = autoQueue.indexOf(state);
++  if (index >= 0) autoQueue.splice(index, 1);
++}
++
++function pumpAutoPlayback() {
++  if (location.pathname !== routeKey) checkRouteChange();
++  if (!autoReadEnabled || activeState) return;
++  while (autoQueue.length) {
++    const state = autoQueue[0];
++    if (!state.turn.isConnected || state.status === 'error') {
++      autoQueue.shift();
++      continue;
++    }
++    if (state.audio && state.status === 'ready') {
++      autoQueue.shift();
++      void playCached(state, true, true);
++    } else if (state.status === 'idle') {
++      processAutoGeneration();
++    }
++    return;
++  }
++}
++
++async function processAutoGeneration() {
++  if (location.pathname !== routeKey) checkRouteChange();
++  if (navigationHydrating) return;
++  if (!autoReadEnabled || autoGeneratingState || activeState?.status === 'generating') return;
++  const state = autoQueue.find(item => item.status === 'idle' && !item.audio);
++  if (!state) return;
++  autoGeneratingState = state;
++  try {
++    const { voiceId } = await chrome.storage.local.get('voiceId');
++    if (location.pathname !== routeKey) checkRouteChange();
++    if (!autoReadEnabled || navigationHydrating || !autoQueue.includes(state)) return;
++    if (!voiceId) {
++      removeQueuedAuto(state);
++      return;
++    }
++    autoLog('generating', state);
++    const generated = await generateReply(state, true);
++    if (!generated && (state.status === 'error' ||
++        state.status === 'idle' && activeState?.status !== 'generating')) {
++      removeQueuedAuto(state);
++    }
++  } catch (error) {
++    console.error('[Irodori] Auto speech failed:', error);
++    removeQueuedAuto(state);
++    if (state.status === 'generating') stopState(state, false);
++  } finally {
++    if (autoGeneratingState === state) autoGeneratingState = null;
++    pumpAutoPlayback();
++    if (autoReadEnabled) processAutoGeneration();
++  }
++}
++
++function enqueueAuto(state) {
++  state.autoHandled = true;
++  const id = turnId(state.turn);
++  if (id) handledTurnIds.add(id);
++  if (activeState === state && (state.status === 'playing' || state.status === 'paused')) return;
++  autoQueue.push(state);
++  autoLog('queued', state);
++  processAutoGeneration();
++  pumpAutoPlayback();
++}
++
++function isGeneratingOnPage() {
++  const button = document.querySelector?.(
++    '[aria-label="生成を中止する"], [aria-label="Stop generating"], [data-testid="stop-button"]'
++  );
++  if (!button || button.hidden || button.closest?.('[hidden], [aria-hidden="true"]')) return false;
++  const style = getComputedStyle(button);
++  return style.display !== 'none' && style.visibility !== 'hidden';
++}
++
++function isTurnComplete(turn) {
++  return turn.hasAttribute?.('data-message-complete') &&
++    !['false', '0'].includes(turn.getAttribute?.('data-message-complete'));
++}
++
++function isTurnStreaming(turn) {
++  return !isTurnComplete(turn) && turn.hasAttribute?.('data-message-streaming') &&
++    !['false', '0'].includes(turn.getAttribute?.('data-message-streaming'));
++}
++
++function checkAutoCandidate(state) {
++  if (!autoSettingsReady || !autoReadEnabled || navigationHydrating || state.autoHandled ||
++      isBaseline(state.turn) || handledTurnIds.has(turnId(state.turn)) ||
++      state.status === 'generating') return;
++  const turn = state.turn;
++  if (!state.autoEligible) {
++    state.autoEligible = true;
++    autoLog('new candidate', state);
++  }
++  const body = messageBody(turn);
++  const currentText = body?.textContent || '';
++  if (currentText !== state.autoText) {
++    state.autoText = currentText;
++    clearTimeout(state.autoTimer);
++    state.autoTimer = null;
++  }
++  if (!currentText.trim() || isTurnStreaming(turn) ||
++      isGeneratingOnPage() && !isTurnComplete(turn)) {
++    clearTimeout(state.autoTimer);
++    state.autoTimer = null;
++    return;
++  }
++  if (state.autoTimer) return;
++  if (!state.autoWaitingLogged) {
++    autoLog('waiting for stable text', state);
++    state.autoWaitingLogged = true;
++  }
++  state.autoTimer = setTimeout(() => {
++    state.autoTimer = null;
++    if (location.pathname !== routeKey) {
++      checkRouteChange();
++      return;
++    }
++    if (!autoReadEnabled || state.autoHandled || !turn.isConnected ||
++        isTurnStreaming(turn) || isGeneratingOnPage() && !isTurnComplete(turn)) return;
++    if ((messageBody(turn)?.textContent || '') !== state.autoText) {
++      checkAutoCandidate(state);
++      return;
++    }
++    const speechText = sanitizeForSpeech(extractReplyText(messageBody(turn)));
++    if (speechText) {
++      autoLog('completed', state);
++      enqueueAuto(state);
++    }
++  }, AUTO_STABLE_MS);
++}
++
++function clearAutoQueue() {
++  autoQueue.length = 0;
++  if (autoGeneratingState) stopState(autoGeneratingState, false);
++}
++
++function isNewChatRouteAssignment(previousRoute) {
++  if (previousRoute !== '/') return false;
++  const recentlySubmitted = newChatSubmissionAt > 0 &&
++    Date.now() - newChatSubmissionAt < 30000;
++  return recentlySubmitted || isGeneratingOnPage() || assistantTurns().some(turn =>
++    !isBaseline(turn) && isTurnStreaming(turn)
++  ) || [...audioStates.values()].some(state =>
++    state.autoEligible && !isBaseline(state.turn)
++  );
++}
++
++function beginNavigationHydration() {
++  navigationHydrating = true;
++  navigationSignature = null;
++  clearTimeout(navigationTimer);
++  navigationTimer = null;
++  for (const state of audioStates.values()) {
++    clearTimeout(state.autoTimer);
++    state.autoTimer = null;
++    state.autoEligible = false;
++  }
++  clearAutoQueue();
++  if (activeState) stopState(activeState, false);
++  markExistingTurns();
++  navigationLog('navigation hydration start');
++}
++
++function checkRouteChange() {
++  const nextRoute = location.pathname;
++  if (nextRoute === routeKey) return;
++  const previousRoute = routeKey;
++  routeKey = nextRoute;
++  navigationLog('route changed');
++  const newChatAssignment = isNewChatRouteAssignment(previousRoute);
++  newChatSubmissionAt = 0;
++  if (newChatAssignment) return;
++  beginNavigationHydration();
++  // The observed '/' route is the blank new-chat landing page, not history.
++  if (nextRoute === '/') {
++    navigationHydrating = false;
++    navigationLog('navigation hydration complete');
++  }
++}
++
++function updateNavigationHydration(turns) {
++  if (!navigationHydrating) return;
++  const signature = turns.map(turn =>
++    (turnId(turn) || '') + '\u0000' + (messageBody(turn)?.textContent || '')
++  ).join('\u0001');
++  if (signature === navigationSignature) return;
++  navigationSignature = signature;
++  clearTimeout(navigationTimer);
++  const expectedRoute = routeKey;
++  navigationTimer = setTimeout(() => {
++    if (routeKey !== expectedRoute) return;
++    navigationHydrating = false;
++    navigationTimer = null;
++    navigationSignature = null;
++    navigationLog('navigation hydration complete');
++  }, NAVIGATION_STABLE_MS);
++}
++
++async function onPrimary(state) {
++  removeQueuedAuto(state);
++  if (state.status === 'generating' || state.status === 'playing' ||
++      state.status === 'paused') {
++    stopState(state);
++  } else if (state.status === 'ready') {
++    await playCached(state, true);
++  } else {
++    await generateReply(state);
++  }
++}
++
++async function onPause(state) {
++  if (activeState !== state || !state.audio) return;
++  if (state.status === 'playing') {
++    state.audio.pause();
++    state.status = 'paused';
++    renderState(state);
++    showStatus(state, '一時停止中');
++  } else if (state.status === 'paused') {
++    await playCached(state, false);
+   }
+ }
+ 
++async function regenerateReply(state) {
++  if (state.status !== 'ready') return;
++  removeQueuedAuto(state);
++  await generateReply(state);
++}
++
++function destroyState(state) {
++  removeQueuedAuto(state);
++  clearTimeout(state.autoTimer);
++  if (activeState === state || state.status === 'generating') stopState(state);
++  discardAudio(state);
++  audioStates.delete(state.turn);
++}
++
++if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
++  chrome.storage.onChanged.addListener((changes, area) => {
++    if (area !== 'local') return;
++    if (changes.speechRate) {
++      for (const state of audioStates.values()) {
++        if (state.audio) applyPlaybackRate(state.audio, changes.speechRate.newValue);
++      }
++    }
++    if (changes.autoRead) {
++      autoSettingChanged = true;
++      // Replies already on screen at the moment of activation are historical.
++      markExistingTurns();
++      autoReadEnabled = changes.autoRead.newValue === true;
++      autoSettingsReady = true;
++      if (!autoReadEnabled) clearAutoQueue();
++    }
++  });
++}
++
+ function addButton(turn) {
+-  if (turn.querySelector('.irodori-action')) return;
++  let state = audioStates.get(turn);
++  if (state?.button.isConnected || turn.querySelector('.irodori-action')) return;
+   const body = messageBody(turn);
+   if (!body) return;
+   const action = document.createElement('div');
+   action.className = 'irodori-action';
+-  action.style.cssText = 'display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12px;';
++  action.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0;font-size:12px;';
+   const button = document.createElement('button');
+   button.type = 'button';
+   button.style.cssText = 'padding:5px 9px;border:0;border-radius:6px;background:#10a37f;color:white;cursor:pointer;font-weight:600;';
+-  setButton(button, false);
++  const pauseButton = document.createElement('button');
++  pauseButton.type = 'button';
++  pauseButton.className = 'irodori-pause';
++  pauseButton.hidden = true;
++  pauseButton.style.cssText = 'padding:5px 9px;border:0;border-radius:6px;background:#253449;color:white;cursor:pointer;font-weight:600;';
++  const regenerateButton = document.createElement('button');
++  regenerateButton.type = 'button';
++  regenerateButton.textContent = '↻ 再生成';
++  regenerateButton.setAttribute('aria-label', 'Irodori 音声を再生成');
++  regenerateButton.style.cssText = 'padding:5px 9px;border:0;border-radius:6px;background:#253449;color:white;cursor:pointer;font-weight:600;';
+   const status = document.createElement('span');
+   status.className = 'irodori-status';
+   status.setAttribute('role', 'status');
+-  action.append(button, status);
++  action.append(pauseButton, button, regenerateButton, status);
++  if (state) {
++    Object.assign(state, { button, pauseButton, regenerateButton, statusElement: status });
++  } else {
++    state = {
++      turn, button, pauseButton, regenerateButton, statusElement: status,
++      status: 'idle', requestId: null, audio: null, url: null,
++      autoEligible: false, autoHandled: false, autoTimer: null, autoText: '',
++      autoWaitingLogged: false
++    };
++    audioStates.set(turn, state);
++  }
++  renderState(state);
++  pauseButton.addEventListener('click', event => {
++    event.preventDefault();
++    event.stopPropagation();
++    void onPause(state);
++  });
+   button.addEventListener('click', event => {
+     event.preventDefault();
+     event.stopPropagation();
+-    readReply(button, turn);
++    void onPrimary(state);
++  });
++  regenerateButton.addEventListener('click', event => {
++    event.preventDefault();
++    event.stopPropagation();
++    void regenerateReply(state);
+   });
+   if (body === turn) turn.appendChild(action);
+   else body.insertAdjacentElement('afterend', action);
+@@ -197,14 +646,46 @@ function addButton(turn) {
+ 
+ function scan() {
+   scanScheduled = false;
+-  for (const turn of assistantTurns()) addButton(turn);
++  checkRouteChange();
++  const turns = assistantTurns();
++  for (const turn of turns) {
++    if (navigationHydrating) {
++      if (!isBaseline(turn)) navigationLog('baseline historical turn');
++      markTurnBaseline(turn);
++    }
++    addButton(turn);
++    const state = audioStates.get(turn);
++    if (state) checkAutoCandidate(state);
++  }
++  updateNavigationHydration(turns);
++  for (const [turn, state] of audioStates) {
++    if (!turn.isConnected) destroyState(state);
++  }
+ }
+ 
+-const observer = new MutationObserver(() => {
+-  if (activeSession && !activeSession.button.isConnected) stopActive();
++function scheduleScan() {
+   if (scanScheduled) return;
+   scanScheduled = true;
+   requestAnimationFrame(scan);
++}
++
++const observer = new MutationObserver(scheduleScan);
++observer.observe(document.body, {
++  childList: true, characterData: true, attributes: true,
++  attributeFilter: ['data-message-streaming', 'data-message-complete'], subtree: true
+ });
+-observer.observe(document.body, { childList: true, subtree: true });
++window.addEventListener('popstate', scheduleScan);
++window.addEventListener('submit', noteNewChatSubmission, true);
++markExistingTurns();
+ scan();
++if (typeof chrome !== 'undefined' && chrome.storage?.local) {
++  chrome.storage.local.get('autoRead').then(({ autoRead = false }) => {
++    if (autoSettingChanged) return;
++    autoReadEnabled = autoRead === true;
++    autoSettingsReady = true;
++    scan();
++  }).catch(error => {
++    console.error('[Irodori] Auto read setting load failed:', error);
++    autoSettingsReady = true;
++  });
++}
 diff --git a/manifest.json b/manifest.json
-index de17753..4f5e101 100644
+index 4f5e101..077738a 100644
 --- a/manifest.json
 +++ b/manifest.json
-@@ -1,7 +1,7 @@
+@@ -1,8 +1,8 @@
  {
    "manifest_version": 3,
    "name": "ChatGPT × Irodori",
--  "version": "0.1.0",
-+  "version": "0.2.0",
-   "description": "Read individual ChatGPT replies aloud with a local Irodori-TTS Server.",
+-  "version": "0.2.0",
+-  "description": "Read individual ChatGPT replies aloud with a local Irodori-TTS Server.",
++  "version": "0.3.2",
++  "description": "Read ChatGPT replies manually or automatically with a local Irodori-TTS Server.",
    "permissions": ["storage"],
    "host_permissions": ["https://chatgpt.com/*", "http://127.0.0.1/*", "http://localhost/*"],
+   "optional_host_permissions": ["http://*/*", "https://*/*"],
 diff --git a/popup.html b/popup.html
-index 92d16b4..0820e34 100644
+index 0820e34..f2b6e7b 100644
 --- a/popup.html
 +++ b/popup.html
-@@ -12,15 +12,28 @@
-       <img src="icon32.png" alt="" width="28" height="28">
-       <h1>ChatGPT × Irodori</h1>
-     </header>
--    <label for="serverUrl">Irodori Server</label>
-+    <label for="serverUrl">Server</label>
-     <input id="serverUrl" type="url" spellcheck="false" value="http://127.0.0.1:8088">
-     <p class="hint">接続確認を押すとURLを保存します。</p>
-+    <button id="connect" type="button">接続確認</button>
-+    <div class="status-block">
-+      <span class="status-label">状態</span>
-+      <p id="status" role="status" aria-live="polite">● 確認中</p>
-+      <p id="statusDetail" class="hint"></p>
-+    </div>
-     <label for="voiceSelect">Voice</label>
-     <select id="voiceSelect">
-       <option value="">Voiceを選択してください</option>
-     </select>
--    <button id="connect" type="button">接続確認</button>
--    <p id="status" role="status" aria-live="polite"></p>
-+    <button id="reloadVoices" class="secondary" type="button">Voice一覧を再読込</button>
-+    <label for="speedSelect">読み上げ速度</label>
-+    <select id="speedSelect">
-+      <option value="0.8">0.8x</option>
-+      <option value="0.9">0.9x</option>
-+      <option value="1" selected>1.0x</option>
-+      <option value="1.1">1.1x</option>
-+      <option value="1.2">1.2x</option>
+@@ -28,11 +28,18 @@
+     <button id="reloadVoices" class="secondary" type="button">Voice一覧を再読込</button>
+     <label for="speedSelect">読み上げ速度</label>
+     <select id="speedSelect">
+-      <option value="0.8">0.8x</option>
+-      <option value="0.9">0.9x</option>
++      <option value="0.5">0.5x</option>
++      <option value="0.75">0.75x</option>
+       <option value="1" selected>1.0x</option>
+-      <option value="1.1">1.1x</option>
+-      <option value="1.2">1.2x</option>
++      <option value="1.25">1.25x</option>
++      <option value="1.5">1.5x</option>
++      <option value="2">2.0x</option>
++      <option value="2.5">2.5x</option>
 +    </select>
++    <label for="autoReadSelect">自動読み上げ</label>
++    <select id="autoReadSelect">
++      <option value="off" selected>OFF</option>
++      <option value="on">ON</option>
+     </select>
    </main>
    <script src="popup.js"></script>
- </body>
 diff --git a/popup.js b/popup.js
-index 7b219c8..a2db6b8 100644
+index a2db6b8..a592e3c 100644
 --- a/popup.js
 +++ b/popup.js
-@@ -1,8 +1,11 @@
- const DEFAULT_SERVER = 'http://127.0.0.1:8088';
+@@ -2,6 +2,7 @@ const DEFAULT_SERVER = 'http://127.0.0.1:8088';
  const serverInput = document.querySelector('#serverUrl');
  const voiceSelect = document.querySelector('#voiceSelect');
-+const speedSelect = document.querySelector('#speedSelect');
+ const speedSelect = document.querySelector('#speedSelect');
++const autoReadSelect = document.querySelector('#autoReadSelect');
  const status = document.querySelector('#status');
-+const statusDetail = document.querySelector('#statusDetail');
+ const statusDetail = document.querySelector('#statusDetail');
  const connectButton = document.querySelector('#connect');
-+const reloadButton = document.querySelector('#reloadVoices');
- 
- function normalizeServerUrl(value) {
-   const url = new URL(value.trim());
-@@ -23,45 +26,118 @@ function sendMessage(action) {
-   });
+@@ -83,8 +84,8 @@ async function checkConnectionAndVoices() {
  }
  
--function setStatus(message) {
--  status.textContent = message;
-+function setStatus(state, label, detail = '') {
-+  status.dataset.state = state;
-+  status.textContent = '● ' + label;
-+  statusDetail.textContent = detail;
+ async function loadSettings() {
+-  const { serverUrl = DEFAULT_SERVER, voiceId = '', speechRate = 1 } =
+-    await chrome.storage.local.get(['serverUrl', 'voiceId', 'speechRate']);
++  const { serverUrl = DEFAULT_SERVER, voiceId = '', speechRate = 1, autoRead = false } =
++    await chrome.storage.local.get(['serverUrl', 'voiceId', 'speechRate', 'autoRead']);
+   serverInput.value = serverUrl;
+   if (voiceId) {
+     voiceSelect.add(new Option(voiceId + '（保存済み）', voiceId));
+@@ -93,6 +94,7 @@ async function loadSettings() {
+   const rate = String(speechRate);
+   speedSelect.value = [...speedSelect.options].some(option => option.value === rate) ? rate : '1';
+   if (speedSelect.value !== rate) await chrome.storage.local.set({ speechRate: 1 });
++  autoReadSelect.value = autoRead === true ? 'on' : 'off';
+   await checkConnectionAndVoices();
  }
  
--async function refreshVoices(savedVoiceId = '') {
-+function setBusy(busy) {
-+  connectButton.disabled = busy;
-+  reloadButton.disabled = busy;
-+}
-+
-+async function refreshVoices() {
-+  const { voiceId = '' } = await chrome.storage.local.get('voiceId');
-   const response = await sendMessage('listVoices');
--  if (response?.error) throw new Error(response.error);
-+  if (response?.error || !Array.isArray(response?.voices)) {
-+    throw new Error(response?.error || 'Invalid voice list');
-+  }
-   voiceSelect.replaceChildren();
-   voiceSelect.add(new Option('Voiceを選択してください', ''));
--  for (const voice of response.voices || []) {
--    voiceSelect.add(new Option(voice.name, voice.id));
-+  for (const voice of response.voices) {
-+    voiceSelect.add(new Option(voice.name || voice.id, voice.id));
-   }
--  if (savedVoiceId && [...voiceSelect.options].some(option => option.value === savedVoiceId)) {
--    voiceSelect.value = savedVoiceId;
-+  const stillAvailable = voiceId &&
-+    [...voiceSelect.options].some(option => option.value === voiceId);
-+  voiceSelect.value = stillAvailable ? voiceId : '';
-+  if (voiceId && !stillAvailable) await chrome.storage.local.remove('voiceId');
-+  return { count: response.voices.length, selected: !!voiceSelect.value };
-+}
-+
-+function showVoiceState({ count, selected }) {
-+  if (count === 0) {
-+    setStatus('warning', '接続OK / Voiceなし',
-+      'Irodori-TTS Serverのvoices設定を確認してください。');
-   } else {
--    voiceSelect.value = '';
--    if (savedVoiceId) await chrome.storage.local.remove('voiceId');
-+    setStatus('ok', '接続OK', selected ? '' : 'Voiceを選択してください。');
-   }
- }
- 
--async function loadSettings() {
--  const { serverUrl = DEFAULT_SERVER, voiceId = '' } =
--    await chrome.storage.local.get(['serverUrl', 'voiceId']);
--  serverInput.value = serverUrl;
-+async function checkConnectionAndVoices() {
-+  try {
-+    const response = await sendMessage('checkConnection');
-+    if (!response?.ok) throw new Error(response?.error || 'Connection failed');
-+  } catch (error) {
-+    console.error('[Irodori] Connection check failed:', error);
-+    setStatus('error', 'Server未接続',
-+      'Irodori-TTS Serverが起動しているか確認してください。');
-+    return;
-+  }
-   try {
--    await refreshVoices(voiceId);
-+    showVoiceState(await refreshVoices());
-   } catch (error) {
-     console.error('[Irodori] Voice list failed:', error);
--    if (voiceId) {
--      voiceSelect.add(new Option(voiceId + '（保存済み）', voiceId));
--      voiceSelect.value = voiceId;
--    }
--    setStatus('Voice一覧を取得できません。');
-+    setStatus('warning', '接続OK / Voice取得失敗');
-   }
- }
- 
-+async function loadSettings() {
-+  const { serverUrl = DEFAULT_SERVER, voiceId = '', speechRate = 1 } =
-+    await chrome.storage.local.get(['serverUrl', 'voiceId', 'speechRate']);
-+  serverInput.value = serverUrl;
-+  if (voiceId) {
-+    voiceSelect.add(new Option(voiceId + '（保存済み）', voiceId));
-+    voiceSelect.value = voiceId;
-+  }
-+  const rate = String(speechRate);
-+  speedSelect.value = [...speedSelect.options].some(option => option.value === rate) ? rate : '1';
-+  if (speedSelect.value !== rate) await chrome.storage.local.set({ speechRate: 1 });
-+  await checkConnectionAndVoices();
-+}
-+
- voiceSelect.addEventListener('change', async () => {
-   await chrome.storage.local.set({ voiceId: voiceSelect.value });
--  setStatus(voiceSelect.value ? 'Voiceを保存しました。' : 'Voiceを選択してください。');
-+  if (status.dataset.state === 'ok') {
-+    statusDetail.textContent = voiceSelect.value ? 'Voiceを保存しました。' : 'Voiceを選択してください。';
-+  }
-+});
-+
-+speedSelect.addEventListener('change', async () => {
-+  await chrome.storage.local.set({ speechRate: Number(speedSelect.value) });
-+});
-+
-+reloadButton.addEventListener('click', async () => {
-+  const { serverUrl = DEFAULT_SERVER } = await chrome.storage.local.get('serverUrl');
-+  let enteredUrl;
-+  try {
-+    enteredUrl = normalizeServerUrl(serverInput.value).origin;
-+  } catch {
-+    statusDetail.textContent = 'Server URLを確認してください。';
-+    return;
-+  }
-+  if (enteredUrl !== serverUrl) {
-+    statusDetail.textContent = 'URL変更後は接続確認を押してください。';
-+    return;
-+  }
-+  setBusy(true);
-+  try {
-+    showVoiceState(await refreshVoices());
-+  } catch (error) {
-+    console.error('[Irodori] Voice reload failed:', error);
-+    // A failed Voice API may mean either a stopped server or just a Voice failure.
-+    try {
-+      const health = await sendMessage('checkConnection');
-+      if (!health?.ok) throw new Error(health?.error || 'Connection failed');
-+      setStatus('warning', '接続OK / Voice取得失敗');
-+    } catch (healthError) {
-+      console.error('[Irodori] Connection check failed:', healthError);
-+      setStatus('error', 'Server未接続',
-+        'Irodori-TTS Serverが起動しているか確認してください。');
-+    }
-+  } finally {
-+    setBusy(false);
-+  }
+@@ -107,6 +109,10 @@ speedSelect.addEventListener('change', async () => {
+   await chrome.storage.local.set({ speechRate: Number(speedSelect.value) });
  });
  
- connectButton.addEventListener('click', async () => {
-@@ -69,10 +145,9 @@ connectButton.addEventListener('click', async () => {
-   try {
-     url = normalizeServerUrl(serverInput.value);
-   } catch {
--    setStatus('Server URLを確認してください。');
-+    statusDetail.textContent = 'Server URLを確認してください。';
-     return;
-   }
--  // Match patterns without a port cover all ports for this host.
-   const isDefaultHost = url.protocol === 'http:' &&
-     ['127.0.0.1', 'localhost'].includes(url.hostname);
-   if (!isDefaultHost) {
-@@ -81,43 +156,34 @@ connectButton.addEventListener('click', async () => {
-         origins: [url.protocol + '//' + url.hostname + '/*']
-       });
-       if (!granted) {
--        setStatus('Serverへのアクセス許可が必要です。');
-+        statusDetail.textContent = 'Serverへのアクセス許可が必要です。';
-         return;
-       }
-     } catch (error) {
-       console.error('[Irodori] Permission request failed:', error);
--      setStatus('Serverへのアクセス許可が必要です。');
-+      statusDetail.textContent = 'Serverへのアクセス許可が必要です。';
-       return;
-     }
-   }
--  connectButton.disabled = true;
-+  setBusy(true);
-   try {
--    const { serverUrl: previousUrl = DEFAULT_SERVER, voiceId = '' } =
--      await chrome.storage.local.get(['serverUrl', 'voiceId']);
-+    const { serverUrl: previousUrl = DEFAULT_SERVER } =
-+      await chrome.storage.local.get('serverUrl');
-     const changed = previousUrl !== url.origin;
--    await chrome.storage.local.set({
--      serverUrl: url.origin,
--      voiceId: changed ? '' : voiceId
--    });
-+    await chrome.storage.local.set({ serverUrl: url.origin });
-     if (changed) {
-+      await chrome.storage.local.remove('voiceId');
-       voiceSelect.replaceChildren();
-       voiceSelect.add(new Option('Voiceを選択してください', ''));
-     }
-     serverInput.value = url.origin;
--    const response = await sendMessage('checkConnection');
--    if (!response?.ok) throw new Error(response?.error || 'Connection failed');
--    setStatus('接続OK');
--    try {
--      await refreshVoices(changed ? '' : voiceId);
--    } catch (error) {
--      console.error('[Irodori] Voice list failed:', error);
--      setStatus('接続OK（Voice一覧を取得できません）');
--    }
-+    await checkConnectionAndVoices();
-   } catch (error) {
--    console.error('[Irodori] Connection check failed:', error);
--    setStatus('接続できません');
-+    console.error('[Irodori] Server settings failed:', error);
-+    setStatus('error', 'Server未接続',
-+      'Irodori-TTS Serverが起動しているか確認してください。');
-   } finally {
--    connectButton.disabled = false;
-+    setBusy(false);
-   }
- });
- 
-diff --git a/styles.css b/styles.css
-index d2b2a0a..a125d07 100644
---- a/styles.css
-+++ b/styles.css
-@@ -10,4 +10,11 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid #70d3bb; ou
- .hint { margin: 5px 0 0; color: #bac5d2; font-size: 12px; }
- button { width: 100%; margin-top: 18px; padding: 10px; border: 0; border-radius: 6px; background: #10a37f; color: white; font: inherit; font-weight: 700; cursor: pointer; }
- button:disabled { opacity: .6; cursor: wait; }
--#status { min-height: 1.5em; margin: 11px 0 0; color: #d7e2ed; }
-+button.secondary { margin-top: 9px; border: 1px solid #586679; background: #253449; }
-+.status-block { margin: 15px 0; padding: 10px; border: 1px solid #44566b; border-radius: 6px; background: #1b2736; }
-+.status-label { color: #bac5d2; font-size: 12px; }
-+#status { margin: 3px 0 0; font-weight: 700; }
-+#status[data-state="ok"] { color: #70d3bb; }
-+#status[data-state="error"] { color: #ff9f9f; }
-+#status[data-state="warning"] { color: #ffd285; }
-+#statusDetail:empty { display: none; }
++autoReadSelect.addEventListener('change', async () => {
++  await chrome.storage.local.set({ autoRead: autoReadSelect.value === 'on' });
++});
++
+ reloadButton.addEventListener('click', async () => {
+   const { serverUrl = DEFAULT_SERVER } = await chrome.storage.local.get('serverUrl');
+   let enteredUrl;
 diff --git a/tests/background.test.js b/tests/background.test.js
-index c6f92ba..957f901 100644
+index 957f901..af60c3a 100644
 --- a/tests/background.test.js
 +++ b/tests/background.test.js
-@@ -7,9 +7,9 @@ const vm = require('node:vm');
- const source = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
- const sender = { tab: { id: 7 }, url: 'https://chatgpt.com/c/example' };
- 
--function setup({ voiceId = 'shiori', serverUrl = 'http://127.0.0.1:8088', fetch }) {
-+function setup({ voiceId = 'shiori', serverUrl = 'http://127.0.0.1:8088', speechRate = 1, fetch }) {
-   let listener;
--  const data = { voiceId, serverUrl };
-+  const data = { voiceId, serverUrl, speechRate };
-   const chrome = {
-     runtime: { onMessage: { addListener(fn) { listener = fn; } } },
-     storage: { local: { async get() { return data; } } },
-@@ -47,10 +47,29 @@ test('sends the selected reply and voice to the local speech API', async () => {
-   assert.equal(requests[1].url, 'http://127.0.0.1:8088/v1/audio/speech');
-   assert.equal(requests[1].options.method, 'POST');
-   assert.deepEqual(JSON.parse(requests[1].options.body), {
--    model: 'server-model', input: '対象の回答', voice: 'shiori', response_format: 'mp3'
-+    model: 'server-model', input: '対象の回答', voice: 'shiori',
-+    speed: 1, response_format: 'mp3'
+@@ -52,11 +52,11 @@ test('sends the selected reply and voice to the local speech API', async () => {
    });
  });
  
-+test('passes the saved speed and speaker embedding voice ID to Irodori', async () => {
-+  let body;
-+  const message = setup({
-+    voiceId: '敷嶋てとら_02',
-+    speechRate: 1.2,
-+    fetch: async (url, options = {}) => {
-+      if (url.endsWith('/v1/models')) {
-+        return new Response(JSON.stringify({ data: [{ id: 'irodori-tts' }] }));
-+      }
-+      body = JSON.parse(options.body);
-+      return new Response(new Uint8Array([1]), { headers: { 'content-type': 'audio/mpeg' } });
-+    }
-+  });
-+  await message({ action: 'tts', requestId: 'speed', payload: '速度テスト' });
-+  assert.equal(body.voice, '敷嶋てとら_02');
-+  assert.equal(body.speed, 1.2);
-+});
-+
- test('reports an unset voice without a network request', async () => {
+-test('passes the saved speed and speaker embedding voice ID to Irodori', async () => {
++test('generates at speed 1 despite saved playback speed and keeps the embedding voice ID', async () => {
+   let body;
    const message = setup({
-     voiceId: '',
+     voiceId: '敷嶋てとら_02',
+-    speechRate: 1.2,
++    speechRate: 2.5,
+     fetch: async (url, options = {}) => {
+       if (url.endsWith('/v1/models')) {
+         return new Response(JSON.stringify({ data: [{ id: 'irodori-tts' }] }));
+@@ -67,7 +67,7 @@ test('passes the saved speed and speaker embedding voice ID to Irodori', async (
+   });
+   await message({ action: 'tts', requestId: 'speed', payload: '速度テスト' });
+   assert.equal(body.voice, '敷嶋てとら_02');
+-  assert.equal(body.speed, 1.2);
++  assert.equal(body.speed, 1);
+ });
+ 
+ test('reports an unset voice without a network request', async () => {
 diff --git a/tests/content.test.js b/tests/content.test.js
-index eb8fcbe..4ac10e2 100644
+index 4ac10e2..30a0573 100644
 --- a/tests/content.test.js
 +++ b/tests/content.test.js
-@@ -17,6 +17,7 @@ function element(tagName, children = [], options = {}) {
-     childNodes: children,
-     hidden: options.hidden,
-     matches(selector) {
-+      if (options.selector && selector.includes(options.selector)) return true;
-       return ['PRE', 'BUTTON'].includes(tagName) && selector.includes(tagName.toLowerCase());
-     }
-   };
-@@ -49,3 +50,28 @@ test('extracts headings and list text while excluding code, controls, and hidden
-   assert.match(result, /項目B/);
-   assert.doesNotMatch(result, /SECRET_CODE|コピー|隠しテキスト/);
+@@ -27,6 +27,8 @@ test('extracts headings and list text while excluding code, controls, and hidden
+   const context = vm.createContext({
+     Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
+     document: { body: {}, querySelectorAll: () => [] },
++    location: { pathname: '/' },
++    window: { addEventListener() {} },
+     MutationObserver: class { observe() {} },
+     requestAnimationFrame() {},
+     getComputedStyle: node => ({
+@@ -55,6 +57,8 @@ test('keeps readable labels and sections, removing URLs and Markdown syntax', ()
+   const context = vm.createContext({
+     Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
+     document: { body: {}, querySelectorAll: () => [] },
++    location: { pathname: '/' },
++    window: { addEventListener() {} },
+     MutationObserver: class { observe() {} },
+     requestAnimationFrame() {},
+     getComputedStyle: () => ({ display: 'block', visibility: 'visible' })
+@@ -75,3 +79,734 @@ test('keeps readable labels and sections, removing URLs and Markdown syntax', ()
+   assert.match(result, /Irodori-TTS と OpenAI公式サイト/);
+   assert.doesNotMatch(result, /https?:|example\.com|Sources|\*\*|^##|^- /m);
  });
 +
-+test('keeps readable labels and sections, removing URLs and Markdown syntax', () => {
-+  const context = vm.createContext({
-+    Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
-+    document: { body: {}, querySelectorAll: () => [] },
-+    MutationObserver: class { observe() {} },
-+    requestAnimationFrame() {},
-+    getComputedStyle: () => ({ display: 'block', visibility: 'visible' })
-+  });
-+  vm.runInContext(source, context);
-+  context.fixture = element('DIV', [
-+    element('H2', [text('## Server設定')]),
-+    element('P', [text('**重要**: '), element('A', [text('公式サイト')]), text('を参照。')]),
-+    element('P', [text('https://example.com/path?id=123。')]),
-+    element('UL', [element('LI', [text('- Apple')]), element('LI', [text('- Banana')])]),
-+    element('SPAN', [text('Sources 1')], { selector: '[data-testid*="citation"]' }),
-+    element('P', [text('`Irodori-TTS` と [OpenAI公式サイト](https://openai.com/)')])
-+  ]);
-+  const result = vm.runInContext('sanitizeForSpeech(extractReplyText(fixture))', context);
-+  assert.match(result, /Server設定/);
-+  assert.match(result, /重要: 公式サイトを参照。/);
-+  assert.match(result, /Apple\nBanana/);
-+  assert.match(result, /Irodori-TTS と OpenAI公式サイト/);
-+  assert.doesNotMatch(result, /https?:|example\.com|Sources|\*\*|^##|^- /m);
-+});
-diff --git a/tests/popup.test.js b/tests/popup.test.js
-new file mode 100644
-index 0000000..4ff7e4b
---- /dev/null
-+++ b/tests/popup.test.js
-@@ -0,0 +1,93 @@
-+const test = require('node:test');
-+const assert = require('node:assert/strict');
-+const fs = require('node:fs');
-+const path = require('node:path');
-+const vm = require('node:vm');
++function playbackFixture() {
++  const audioInstances = [];
++  const revokedUrls = [];
++  const requests = [];
++  const cancellations = [];
++  let speechRate = 1;
++  let storageListener;
++  let deferNext = false;
++  let pendingResponse;
++  let ttsError = null;
++  let autoRead = false;
++  let voiceId = 'shiori';
++  let now = 0;
++  let nextTimerId = 1;
++  const timers = new Map();
++  const rafCallbacks = [];
++  let mutationCallback;
++  let popstateCallback;
++  let submitCallback;
++  let stopButton = null;
++  const location = { pathname: '/c/conversation-A' };
 +
-+const source = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
-+
-+function setup({ voiceId = 'shiori', speechRate = 1, voices = [{ id: 'shiori' }], health = true,
-+  voiceError = false } = {}) {
-+  const data = { serverUrl: 'http://127.0.0.1:8088', voiceId, speechRate };
-+  const server = { voices, health, voiceError };
-+  const elements = {};
-+  for (const id of ['serverUrl', 'voiceSelect', 'speedSelect', 'status',
-+    'statusDetail', 'connect', 'reloadVoices']) {
-+    elements[id] = {
-+      value: '', textContent: '', dataset: {}, options: [], disabled: false, listeners: {},
-+      addEventListener(type, fn) { this.listeners[type] = fn; },
-+      replaceChildren() { this.options = []; },
-+      add(option) { this.options.push(option); }
++  function domElement(tagName, children = []) {
++    return {
++      nodeType: 1, tagName, childNodes: children, className: '',
++      style: {}, hidden: false, isConnected: true, textContent: '',
++      listeners: {}, parentElement: null, attributes: new Set(),
++      matches(selector) {
++        return selector.includes('.irodori-action') && this.className === 'irodori-action' ||
++          tagName === 'BUTTON' && selector.includes('button');
++      },
++      querySelector(selector) {
++        return selector === '.irodori-action' ?
++          this.childNodes.find(child => child.className === 'irodori-action') || null : null;
++      },
++      hasAttribute(name) { return this.attributes.has(name); },
++      getAttribute(name) { return name === 'data-message-id' ? this.id : null; },
++      closest(selector) { return this.role === 'assistant' && selector.includes('assistant') ? this : null; },
++      append(...items) {
++        for (const item of items) {
++          item.parentElement = this;
++          this.childNodes.push(item);
++        }
++      },
++      appendChild(item) { this.append(item); },
++      insertAdjacentElement(_position, item) { this.append(item); },
++      addEventListener(type, callback) { this.listeners[type] = callback; },
++      setAttribute(name) { this.attributes.add(name); },
++      removeAttribute(name) { if (name === 'src') this.src = ''; }
 +    };
 +  }
-+  elements.speedSelect.options = ['0.8', '0.9', '1', '1.1', '1.2']
-+    .map(value => ({ value }));
-+  const chrome = {
-+    storage: { local: {
-+      async get(keys) {
-+        const names = Array.isArray(keys) ? keys : [keys];
-+        return Object.fromEntries(names.filter(key => key in data).map(key => [key, data[key]]));
-+      },
-+      async set(values) { Object.assign(data, values); },
-+      async remove(key) { delete data[key]; }
-+    } },
-+    runtime: {
-+      lastError: null,
-+      sendMessage({ action }, callback) {
-+        if (action === 'checkConnection') callback(server.health ? { ok: true } : { error: 'CONNECTION' });
-+        if (action === 'listVoices') callback(server.voiceError ?
-+          { error: 'GENERATION' } : { voices: server.voices });
++
++  class FakeAudio {
++    constructor(src) {
++      this.src = src;
++      this.currentTime = 0;
++      this.paused = true;
++      this.playbackRate = 1;
++      this.preservesPitch = false;
++      this.playCalls = 0;
++      this.loadCalls = 0;
++      audioInstances.push(this);
++    }
++    play() {
++      this.playCalls++;
++      this.paused = false;
++      return Promise.resolve();
++    }
++    pause() { this.paused = true; }
++    removeAttribute(name) { if (name === 'src') this.src = ''; }
++    load() {
++      this.loadCalls++;
++      this.currentTime = 0;
++    }
++  }
++
++  const turnA = domElement('DIV', [text('回答A')]);
++  const turnB = domElement('DIV', [text('回答B')]);
++  turnA.id = 'reply-A';
++  turnB.id = 'reply-B';
++  turnA.role = turnB.role = 'assistant';
++  turnA.textContent = '回答A';
++  turnB.textContent = '回答B';
++  const turns = [turnA, turnB];
++  const context = vm.createContext({
++    Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
++    document: {
++      body: {},
++      querySelectorAll: () => turns.filter(turn => turn.isConnected),
++      querySelector: () => stopButton,
++      createElement: tag => domElement(tag.toUpperCase())
++    },
++    location,
++    window: {
++      addEventListener(type, callback) {
++        if (type === 'popstate') popstateCallback = callback;
++        if (type === 'submit') submitCallback = callback;
 +      }
 +    },
-+    permissions: { async request() { return true; } }
-+  };
-+  const context = vm.createContext({
-+    chrome, URL,
-+    Option: class { constructor(label, value) { this.label = label; this.value = value; } },
-+    document: { querySelector(selector) { return elements[selector.slice(1)]; } },
-+    console: { error() {} }
++    MutationObserver: class { constructor(callback) { mutationCallback = callback; } observe() {} },
++    requestAnimationFrame(callback) { rafCallbacks.push(callback); },
++    setTimeout(callback, delay) {
++      const id = nextTimerId++;
++      timers.set(id, { due: now + delay, callback });
++      return id;
++    },
++    clearTimeout(id) { timers.delete(id); },
++    getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
++    Audio: FakeAudio, Blob, Uint8Array,
++    URL: {
++      createObjectURL: () => 'blob:test-' + (audioInstances.length + 1),
++      revokeObjectURL: url => revokedUrls.push(url)
++    },
++    chrome: {
++      storage: {
++        local: { async get() { return { speechRate, autoRead, voiceId }; } },
++        onChanged: { addListener(callback) { storageListener = callback; } }
++      },
++      runtime: {
++        lastError: null,
++        sendMessage(message, callback) {
++          if (message.action === 'tts') {
++            requests.push(message);
++            if (ttsError) {
++              callback({ error: ttsError });
++            } else if (deferNext) {
++              deferNext = false;
++              pendingResponse = callback;
++            } else {
++              callback({ audioBuffer: [1, 2, 3], mimeType: 'audio/mpeg' });
++            }
++          } else if (message.action === 'cancel') {
++            cancellations.push(message);
++            callback({ ok: true });
++          }
++        }
++      }
++    },
++    console: { error() {}, info() {} }
 +  });
 +  vm.runInContext(source, context);
-+  return { data, server, elements, ready: new Promise(resolve => setImmediate(resolve)) };
++  context.turnA = turnA;
++  context.turnB = turnB;
++  const state = turn => {
++    context.currentTurn = turn;
++    return vm.runInContext('audioStates.get(currentTurn)', context);
++  };
++  const primary = turn => {
++    context.currentTurn = turn;
++    return vm.runInContext('onPrimary(audioStates.get(currentTurn))', context);
++  };
++  const pause = turn => {
++    context.currentTurn = turn;
++    return vm.runInContext('onPause(audioStates.get(currentTurn))', context);
++  };
++  const regenerate = turn => {
++    context.currentTurn = turn;
++    return vm.runInContext('regenerateReply(audioStates.get(currentTurn))', context);
++  };
++  return {
++    context, turnA, turnB, audioInstances, revokedUrls, requests, cancellations,
++    state, primary, pause, regenerate,
++    async flush() {
++      for (let index = 0; index < 3; index++) await new Promise(resolve => setImmediate(resolve));
++    },
++    async advance(milliseconds) {
++      const end = now + milliseconds;
++      while (true) {
++        const due = [...timers].filter(([, timer]) => timer.due <= end)
++          .sort((a, b) => a[1].due - b[1].due)[0];
++        if (!due) break;
++        now = due[1].due;
++        timers.delete(due[0]);
++        due[1].callback();
++        await this.flush();
++      }
++      now = end;
++    },
++    setAuto(enabled) {
++      autoRead = enabled;
++      storageListener({ autoRead: { newValue: enabled } }, 'local');
++    },
++    setVoice(value) { voiceId = value; },
++    setTtsError(value) { ttsError = value; },
++    submitNewChatPrompt() {
++      submitCallback({ target: { querySelector: () => ({}) } });
++    },
++    setRoute(pathname, { popstate = false } = {}) {
++      location.pathname = pathname;
++      if (popstate) {
++        popstateCallback();
++        while (rafCallbacks.length) rafCallbacks.shift()();
++      } else {
++        vm.runInContext('scan()', context);
++      }
++    },
++    setRouteWithoutScan(pathname) { location.pathname = pathname; },
++    removeReply(turn) {
++      turn.isConnected = false;
++      vm.runInContext('scan()', context);
++    },
++    setStopButton(hidden = false) {
++      stopButton = domElement('BUTTON');
++      stopButton.hidden = hidden;
++    },
++    clearStopButton() {
++      stopButton = null;
++      mutationCallback([{ type: 'childList', target: {} }]);
++      while (rafCallbacks.length) rafCallbacks.shift()();
++    },
++    addReply(id, value, { streaming = true } = {}) {
++      const turn = domElement('DIV', [text(value)]);
++      turn.id = id;
++      turn.role = 'assistant';
++      turn.textContent = value;
++      if (streaming) turn.attributes.add('data-message-streaming');
++      turns.push(turn);
++      vm.runInContext('scan()', context);
++      return turn;
++    },
++    mutation(turn, attributeName) {
++      mutationCallback([{ type: 'attributes', target: turn, attributeName }]);
++      while (rafCallbacks.length) rafCallbacks.shift()();
++    },
++    complete(turn) {
++      turn.attributes.delete('data-message-streaming');
++      turn.attributes.add('data-message-complete');
++      this.mutation(turn, 'data-message-complete');
++    },
++    updateReplyText(turn, value) {
++      turn.childNodes[0].nodeValue = value;
++      turn.textContent = value;
++      mutationCallback([{ type: 'characterData', target: turn.childNodes[0] }]);
++      while (rafCallbacks.length) rafCallbacks.shift()();
++    },
++    setRate(rate) {
++      speechRate = rate;
++      storageListener({ speechRate: { newValue: rate } }, 'local');
++    },
++    deferNext() { deferNext = true; },
++    resolvePending() {
++      pendingResponse({ audioBuffer: [4, 5, 6], mimeType: 'audio/mpeg' });
++      pendingResponse = null;
++    }
++  };
 +}
 +
-+test('reload keeps the selected embedding voice until it disappears', async () => {
-+  const fixture = setup({
-+    voiceId: 'embedding',
-+    voices: [{ id: 'embedding' }, { id: 'shiori' }],
-+    speechRate: 0.9
-+  });
-+  await fixture.ready;
-+  assert.equal(fixture.elements.status.textContent, '● 接続OK');
-+  assert.equal(fixture.elements.voiceSelect.value, 'embedding');
-+  assert.equal(fixture.elements.speedSelect.value, '0.9');
-+  fixture.server.voices = [{ id: 'shiori' }, { id: 'embedding' }];
-+  await fixture.elements.reloadVoices.listeners.click();
-+  assert.equal(fixture.elements.voiceSelect.value, 'embedding');
-+  fixture.server.voices = [{ id: 'shiori' }];
-+  await fixture.elements.reloadVoices.listeners.click();
-+  assert.equal(fixture.elements.voiceSelect.value, '');
-+  assert.equal(fixture.data.voiceId, undefined);
++test('completed audio replays from the start at every selected speed without POST', async () => {
++  const fixture = playbackFixture();
++  const { turnA } = fixture;
++  await fixture.primary(turnA);
++  const audio = fixture.state(turnA).audio;
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(audio.playbackRate, 1);
++  assert.equal(audio.preservesPitch, true);
++  for (const rate of [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5]) {
++    fixture.setRate(rate);
++    assert.equal(audio.playbackRate, rate);
++    audio.currentTime = 42;
++    audio.onended();
++    assert.equal(fixture.state(turnA).status, 'ready');
++    assert.equal(fixture.state(turnA).button.textContent, '▶ 再生');
++    assert.equal(fixture.state(turnA).regenerateButton.hidden, false);
++    await fixture.primary(turnA);
++    assert.equal(audio.currentTime, 0);
++    assert.equal(audio.playbackRate, rate);
++    assert.equal(fixture.requests.length, 1);
++  }
++  assert.equal(fixture.revokedUrls.length, 0);
++  assert.equal(audio.playCalls, 8);
++  assert.equal(fixture.requests.length, 1);
 +});
 +
-+test('popup distinguishes disconnected, no voices, and voice API failure', async () => {
-+  const disconnected = setup({ health: false });
-+  await disconnected.ready;
-+  assert.equal(disconnected.elements.status.textContent, '● Server未接続');
-+  const empty = setup({ voices: [] });
-+  await empty.ready;
-+  assert.equal(empty.elements.status.textContent, '● 接続OK / Voiceなし');
-+  const failed = setup({ voiceError: true });
-+  await failed.ready;
-+  assert.equal(failed.elements.status.textContent, '● 接続OK / Voice取得失敗');
-+  assert.equal(failed.elements.voiceSelect.value, 'shiori');
-+  assert.equal(failed.data.voiceId, 'shiori');
++test('pause resumes at the same position and Stop keeps generated audio', async () => {
++  const fixture = playbackFixture();
++  const { turnA } = fixture;
++  await fixture.primary(turnA);
++  const audio = fixture.state(turnA).audio;
++  audio.currentTime = 18;
++  await fixture.pause(turnA);
++  assert.equal(fixture.state(turnA).status, 'paused');
++  assert.equal(audio.currentTime, 18);
++  assert.equal(audio.paused, true);
++  await fixture.pause(turnA);
++  assert.equal(audio.currentTime, 18);
++  assert.equal(audio.playCalls, 2);
++  assert.equal(fixture.requests.length, 1);
++  await fixture.primary(turnA);
++  assert.equal(fixture.state(turnA).status, 'ready');
++  assert.equal(audio.currentTime, 0);
++  assert.equal(fixture.state(turnA).audio, audio);
++  assert.equal(fixture.revokedUrls.length, 0);
++  await fixture.primary(turnA);
++  assert.equal(fixture.state(turnA).audio, audio);
++  assert.equal(fixture.requests.length, 1);
 +});
 +
-+test('speed selection is persisted', async () => {
++test('switching answers keeps both caches; only regeneration or DOM removal releases one', async () => {
++  const fixture = playbackFixture();
++  const { turnA, turnB } = fixture;
++  await fixture.primary(turnA);
++  const firstA = fixture.state(turnA).audio;
++  firstA.currentTime = 10;
++  await fixture.primary(turnB);
++  const firstB = fixture.state(turnB).audio;
++  assert.equal(fixture.state(turnA).status, 'ready');
++  assert.equal(firstA.currentTime, 0);
++  assert.equal(fixture.state(turnA).audio, firstA);
++  await fixture.primary(turnA);
++  assert.equal(fixture.state(turnB).status, 'ready');
++  assert.equal(fixture.state(turnB).audio, firstB);
++  assert.equal(fixture.requests.length, 2);
++  assert.equal(fixture.revokedUrls.length, 0);
++  await fixture.primary(turnA);
++  await fixture.regenerate(turnA);
++  assert.equal(fixture.requests.length, 3);
++  assert.notEqual(fixture.state(turnA).audio, firstA);
++  assert.equal(firstA.loadCalls, 1);
++  assert.equal(fixture.revokedUrls.length, 1);
++  assert.equal(fixture.state(turnB).audio, firstB);
++  turnA.isConnected = false;
++  vm.runInContext('scan()', fixture.context);
++  assert.equal(fixture.state(turnA), undefined);
++  assert.equal(fixture.revokedUrls.length, 2);
++  assert.equal(fixture.state(turnB).audio, firstB);
++});
++
++test('replacing the action UI keeps the answer audio cache', async () => {
++  const fixture = playbackFixture();
++  await fixture.primary(fixture.turnA);
++  const state = fixture.state(fixture.turnA);
++  const audio = state.audio;
++  audio.onended();
++  const oldButton = state.button;
++  fixture.turnA.childNodes = fixture.turnA.childNodes.filter(
++    child => child.className !== 'irodori-action'
++  );
++  oldButton.isConnected = false;
++  vm.runInContext('scan()', fixture.context);
++  assert.equal(fixture.state(fixture.turnA), state);
++  assert.equal(state.audio, audio);
++  assert.notEqual(state.button, oldButton);
++  assert.equal(state.button.textContent, '▶ 再生');
++  await fixture.primary(fixture.turnA);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.revokedUrls.length, 0);
++});
++
++test('Stop during generation cancels the request and ignores its late response', async () => {
++  const fixture = playbackFixture();
++  fixture.deferNext();
++  const pending = fixture.primary(fixture.turnA);
++  assert.equal(fixture.state(fixture.turnA).status, 'generating');
++  assert.equal(fixture.state(fixture.turnA).button.textContent, '■ Stop');
++  assert.equal(fixture.state(fixture.turnA).pauseButton.hidden, true);
++  await fixture.primary(fixture.turnA);
++  assert.equal(fixture.cancellations.length, 1);
++  assert.equal(fixture.state(fixture.turnA).status, 'idle');
++  fixture.resolvePending();
++  await pending;
++  assert.equal(fixture.state(fixture.turnA).audio, null);
++  assert.equal(fixture.audioInstances.length, 0);
++});
++
++test('auto read waits for completion and stability, then sends exactly once', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const reply = fixture.addReply('reply-C', '新しい回答');
++  await fixture.advance(5000);
++  assert.equal(fixture.requests.length, 0, 'streaming text must not be sent');
++  fixture.complete(reply);
++  await fixture.advance(1499);
++  assert.equal(fixture.requests.length, 0);
++  await fixture.advance(1);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(reply).status, 'playing');
++  assert.equal(fixture.state(reply).autoHandled, true);
++  fixture.mutation(reply, 'data-message-complete');
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 1, 'DOM updates must not regenerate');
++  assert.equal(fixture.state(fixture.turnA).status, 'idle', 'historical replies stay idle');
++});
++
++test('A: a new turn without generation attributes is spoken after 1500ms', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const reply = fixture.addReply('fallback-A', '属性なしの新しい回答', { streaming: false });
++  assert.equal(fixture.state(reply).autoEligible, true);
++  await fixture.advance(1499);
++  assert.equal(fixture.requests.length, 0);
++  await fixture.advance(1);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(reply).status, 'playing');
++});
++
++test('B: each text change resets the fallback stable timer', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const reply = fixture.addReply('fallback-B', '最初の本文', { streaming: false });
++  await fixture.advance(600);
++  fixture.updateReplyText(reply, '途中の本文');
++  await fixture.advance(900);
++  assert.equal(fixture.requests.length, 0);
++  fixture.updateReplyText(reply, '完成した本文');
++  await fixture.advance(1499);
++  assert.equal(fixture.requests.length, 0);
++  await fixture.advance(1);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.requests[0].payload, '完成した本文');
++});
++
++test('C: historical turns without generation attributes remain baseline', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  const old = fixture.addReply('fallback-old', 'OFF中の回答', { streaming: false });
++  fixture.setAuto(true);
++  await fixture.advance(5000);
++  assert.equal(fixture.requests.length, 0);
++  assert.equal(fixture.state(old).autoEligible, false);
++  assert.equal(fixture.state(fixture.turnA).autoEligible, false);
++});
++
++test('D: later mutations on a fallback turn do not regenerate it', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const reply = fixture.addReply('fallback-D', '一度だけ読む', { streaming: false });
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  fixture.updateReplyText(reply, '後から変わった表示');
++  fixture.mutation(reply, 'data-message-complete');
++  await fixture.advance(5000);
++  assert.equal(fixture.requests.length, 1);
++});
++
++test('a visible Stop generating control delays fallback, but a hidden one does not', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setStopButton();
++  const reply = fixture.addReply('fallback-stop', 'UI確認', { streaming: false });
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 0);
++  fixture.clearStopButton();
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++
++  const second = fixture.addReply('fallback-hidden', '非表示UI確認', { streaming: false });
++  fixture.setStopButton(true);
++  vm.runInContext('scan()', fixture.context);
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 2);
++  assert.equal(fixture.state(second).status, 'ready');
++});
++
++test('auto read OFF and OFF to ON leave historical replies untouched', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  const old = fixture.addReply('reply-old', 'OFF中の回答');
++  fixture.complete(old);
++  await fixture.advance(2000);
++  assert.equal(fixture.requests.length, 0);
++  fixture.setAuto(true);
++  await fixture.advance(2000);
++  assert.equal(fixture.requests.length, 0);
++  const fresh = fixture.addReply('reply-fresh', 'ON後の回答');
++  fixture.complete(fresh);
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(fresh).status, 'playing');
++});
++
++test('auto queue synthesizes while playing, then plays in completion order', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const a = fixture.addReply('new-A', '新しいA');
++  fixture.complete(a);
++  await fixture.advance(1500);
++  const b = fixture.addReply('new-B', '新しいB');
++  fixture.complete(b);
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 2);
++  assert.equal(fixture.state(a).status, 'playing');
++  assert.equal(fixture.state(b).status, 'ready');
++  fixture.state(a).audio.onended();
++  await fixture.flush();
++  assert.equal(fixture.state(b).status, 'playing');
++  assert.equal(fixture.requests.length, 2);
++  fixture.state(b).audio.onended();
++  await fixture.primary(a);
++  assert.equal(fixture.requests.length, 2, 'auto audio remains cached for replay');
++});
++
++test('auto completion reuses an existing manual cache and applies playback speed', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setRate(1.5);
++  const reply = fixture.addReply('new-cached', '手動生成済み');
++  await fixture.primary(reply);
++  const audio = fixture.state(reply).audio;
++  await fixture.primary(reply);
++  assert.equal(fixture.state(reply).status, 'ready');
++  fixture.complete(reply);
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(reply).audio, audio);
++  assert.equal(fixture.state(reply).status, 'playing');
++  assert.equal(audio.playbackRate, 1.5);
++});
++
++test('pause blocks the queue, and Stop advances without replaying the stopped reply', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const a = fixture.addReply('new-A', '新しいA');
++  fixture.complete(a);
++  await fixture.advance(1500);
++  const b = fixture.addReply('new-B', '新しいB');
++  fixture.complete(b);
++  await fixture.advance(1500);
++  await fixture.pause(a);
++  assert.equal(fixture.state(a).status, 'paused');
++  assert.equal(fixture.state(b).status, 'ready');
++  await fixture.advance(2000);
++  assert.equal(fixture.state(b).status, 'ready');
++  await fixture.primary(a);
++  await fixture.advance(150);
++  assert.equal(fixture.state(a).status, 'ready');
++  assert.equal(fixture.state(b).status, 'playing');
++  assert.equal(fixture.requests.length, 2);
++});
++
++test('manual playback interrupts auto playback, and OFF drops pending queue', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  const a = fixture.addReply('new-A', '新しいA');
++  fixture.complete(a);
++  await fixture.advance(1500);
++  const b = fixture.addReply('new-B', '新しいB');
++  fixture.complete(b);
++  await fixture.advance(1500);
++  await fixture.primary(fixture.turnA);
++  assert.equal(fixture.state(a).status, 'ready');
++  assert.equal(fixture.state(fixture.turnA).status, 'playing');
++  fixture.setAuto(false);
++  fixture.state(fixture.turnA).audio.onended();
++  await fixture.flush();
++  assert.equal(fixture.state(b).status, 'ready');
++  assert.equal(fixture.requests.length, 3);
++});
++
++test('unset Voice and failed server requests are handled once without auto retry', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setVoice('');
++  const noVoice = fixture.addReply('new-no-voice', 'Voiceなし');
++  fixture.complete(noVoice);
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 0);
++  assert.equal(fixture.state(noVoice).status, 'idle');
++  fixture.setVoice('shiori');
++  fixture.setTtsError('CONNECTION');
++  const offline = fixture.addReply('new-offline', 'Serverなし');
++  fixture.complete(offline);
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(offline).status, 'error');
++  assert.equal(fixture.state(offline).statusElement.textContent, '');
++  fixture.mutation(offline, 'data-message-complete');
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 1);
++});
++
++test('navigation A: opening an old conversation baselines its assistant turns', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setRoute('/c/conversation-B');
++  fixture.removeReply(fixture.turnA);
++  fixture.removeReply(fixture.turnB);
++  const first = fixture.addReply('history-B-1', '過去回答1', { streaming: false });
++  const second = fixture.addReply('history-B-2', '過去回答2', { streaming: false });
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 0);
++  assert.equal(fixture.state(first).autoEligible, false);
++  assert.equal(fixture.state(second).autoEligible, false);
++});
++
++test('navigation B: delayed historical turns stay baseline until hydration settles', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setRoute('/c/conversation-B');
++  fixture.removeReply(fixture.turnA);
++  fixture.removeReply(fixture.turnB);
++  const turns = [];
++  turns.push(fixture.addReply('history-1', '過去回答1', { streaming: false }));
++  await fixture.advance(300);
++  turns.push(fixture.addReply('history-2', '過去回答2', { streaming: false }));
++  await fixture.advance(300);
++  turns.push(fixture.addReply('history-3', '過去回答3', { streaming: false }));
++  await fixture.advance(3000);
++  assert.equal(fixture.requests.length, 0);
++  for (const turn of turns) assert.equal(fixture.state(turn).autoEligible, false);
++});
++
++test('navigation C: a new reply in a hydrated old conversation is auto read', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setRoute('/c/conversation-B');
++  fixture.removeReply(fixture.turnA);
++  fixture.removeReply(fixture.turnB);
++  fixture.addReply('history-B', '過去回答', { streaming: false });
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 0);
++  const fresh = fixture.addReply('fresh-in-B', '新しい回答', { streaming: false });
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(fresh).status, 'playing');
++});
++
++test('navigation D: A to B to C to A never speaks loaded history', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  let previous = [fixture.turnA, fixture.turnB];
++  for (const [route, id] of [
++    ['/c/conversation-B', 'history-B'],
++    ['/uc/conversation-C', 'history-C'],
++    ['/c/conversation-A', 'history-A']
++  ]) {
++    fixture.setRoute(route);
++    for (const turn of previous) fixture.removeReply(turn);
++    previous = [fixture.addReply(id, '保存済み回答', { streaming: false })];
++    await fixture.advance(1800);
++    assert.equal(fixture.requests.length, 0);
++  }
++});
++
++test('navigation E: assigning a URL to the first new-chat reply preserves it', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setRoute('/');
++  fixture.removeReply(fixture.turnA);
++  fixture.removeReply(fixture.turnB);
++  const first = fixture.addReply('first-new-chat', '最初の新規回答', { streaming: false });
++  assert.equal(fixture.state(first).autoEligible, true);
++  fixture.setRoute('/uc/new-conversation');
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(first).status, 'playing');
++});
++
++test('navigation E: a submitted new chat keeps its first reply when URL changes first', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.setRoute('/');
++  fixture.removeReply(fixture.turnA);
++  fixture.removeReply(fixture.turnB);
++  fixture.submitNewChatPrompt();
++  fixture.setRoute('/uc/assigned-before-reply');
++  const first = fixture.addReply('first-after-route', '属性なしの最初の回答', { streaming: false });
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  assert.equal(fixture.state(first).status, 'playing');
++});
++
++test('navigation F: browser back and forward baseline loaded replies', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  let previous = [fixture.turnA, fixture.turnB];
++  for (const [route, id] of [
++    ['/c/conversation-B', 'back-forward-B'],
++    ['/c/conversation-A', 'back-forward-A'],
++    ['/c/conversation-B', 'back-forward-B-again']
++  ]) {
++    fixture.setRoute(route, { popstate: true });
++    for (const turn of previous) fixture.removeReply(turn);
++    previous = [fixture.addReply(id, '履歴からの回答', { streaming: false })];
++    await fixture.advance(1800);
++    assert.equal(fixture.requests.length, 0);
++  }
++});
++
++test('navigation cancels queued synthesis and stops old-conversation playback', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.deferNext();
++  const generating = fixture.addReply('before-navigation', '生成中の回答', { streaming: false });
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 1);
++  fixture.setRoute('/c/conversation-B');
++  assert.equal(fixture.cancellations.length, 1);
++  fixture.resolvePending();
++  await fixture.flush();
++  assert.equal(fixture.state(generating).audio, null);
++  fixture.removeReply(generating);
++  await fixture.advance(1500);
++
++  const fresh = fixture.addReply('new-in-B', 'Bで新しい回答', { streaming: false });
++  await fixture.advance(1500);
++  const audio = fixture.state(fresh).audio;
++  assert.equal(fixture.state(fresh).status, 'playing');
++  fixture.setRoute('/c/conversation-C');
++  assert.equal(audio.paused, true);
++  assert.equal(audio.currentTime, 0);
++  assert.equal(fixture.state(fresh).status, 'ready');
++});
++
++test('a route change before DOM mutation cancels the pending auto timer', async () => {
++  const fixture = playbackFixture();
++  await fixture.flush();
++  fixture.setAuto(true);
++  fixture.addReply('pending-before-route', '移動前の回答', { streaming: false });
++  fixture.setRouteWithoutScan('/c/conversation-B');
++  await fixture.advance(1500);
++  assert.equal(fixture.requests.length, 0);
++});
+diff --git a/tests/popup.test.js b/tests/popup.test.js
+index 4ff7e4b..36d0cb8 100644
+--- a/tests/popup.test.js
++++ b/tests/popup.test.js
+@@ -5,13 +5,16 @@ const path = require('node:path');
+ const vm = require('node:vm');
+ 
+ const source = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
++const popupHtml = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
++const speedOptions = ['0.5', '0.75', '1', '1.25', '1.5', '2', '2.5'];
+ 
+-function setup({ voiceId = 'shiori', speechRate = 1, voices = [{ id: 'shiori' }], health = true,
++function setup({ voiceId = 'shiori', speechRate = 1, autoRead = false,
++  voices = [{ id: 'shiori' }], health = true,
+   voiceError = false } = {}) {
+-  const data = { serverUrl: 'http://127.0.0.1:8088', voiceId, speechRate };
++  const data = { serverUrl: 'http://127.0.0.1:8088', voiceId, speechRate, autoRead };
+   const server = { voices, health, voiceError };
+   const elements = {};
+-  for (const id of ['serverUrl', 'voiceSelect', 'speedSelect', 'status',
++  for (const id of ['serverUrl', 'voiceSelect', 'speedSelect', 'autoReadSelect', 'status',
+     'statusDetail', 'connect', 'reloadVoices']) {
+     elements[id] = {
+       value: '', textContent: '', dataset: {}, options: [], disabled: false, listeners: {},
+@@ -20,8 +23,7 @@ function setup({ voiceId = 'shiori', speechRate = 1, voices = [{ id: 'shiori' }]
+       add(option) { this.options.push(option); }
+     };
+   }
+-  elements.speedSelect.options = ['0.8', '0.9', '1', '1.1', '1.2']
+-    .map(value => ({ value }));
++  elements.speedSelect.options = speedOptions.map(value => ({ value }));
+   const chrome = {
+     storage: { local: {
+       async get(keys) {
+@@ -55,12 +57,12 @@ test('reload keeps the selected embedding voice until it disappears', async () =
+   const fixture = setup({
+     voiceId: 'embedding',
+     voices: [{ id: 'embedding' }, { id: 'shiori' }],
+-    speechRate: 0.9
++    speechRate: 0.75
+   });
+   await fixture.ready;
+   assert.equal(fixture.elements.status.textContent, '● 接続OK');
+   assert.equal(fixture.elements.voiceSelect.value, 'embedding');
+-  assert.equal(fixture.elements.speedSelect.value, '0.9');
++  assert.equal(fixture.elements.speedSelect.value, '0.75');
+   fixture.server.voices = [{ id: 'shiori' }, { id: 'embedding' }];
+   await fixture.elements.reloadVoices.listeners.click();
+   assert.equal(fixture.elements.voiceSelect.value, 'embedding');
+@@ -85,9 +87,29 @@ test('popup distinguishes disconnected, no voices, and voice API failure', async
+ });
+ 
+ test('speed selection is persisted', async () => {
++  const actualOptions = [...popupHtml.matchAll(/<option value="([^"]+)"(?:\s+selected)?>[^<]+x<\/option>/g)]
++    .map(match => match[1]);
++  assert.deepEqual(actualOptions, speedOptions);
+   const fixture = setup();
+   await fixture.ready;
+-  fixture.elements.speedSelect.value = '1.2';
++  assert.equal(fixture.elements.speedSelect.value, '1');
++  fixture.elements.speedSelect.value = '2.5';
+   await fixture.elements.speedSelect.listeners.change();
+-  assert.equal(fixture.data.speechRate, 1.2);
++  assert.equal(fixture.data.speechRate, 2.5);
++  const reopened = setup({ speechRate: fixture.data.speechRate });
++  await reopened.ready;
++  assert.equal(reopened.elements.speedSelect.value, '2.5');
++});
++
++test('automatic reading defaults OFF and is saved across popup openings', async () => {
 +  const fixture = setup();
 +  await fixture.ready;
-+  fixture.elements.speedSelect.value = '1.2';
-+  await fixture.elements.speedSelect.listeners.change();
-+  assert.equal(fixture.data.speechRate, 1.2);
-+});
++  assert.match(popupHtml, /id="autoReadSelect"/);
++  assert.equal(fixture.elements.autoReadSelect.value, 'off');
++  fixture.elements.autoReadSelect.value = 'on';
++  await fixture.elements.autoReadSelect.listeners.change();
++  assert.equal(fixture.data.autoRead, true);
++  const reopened = setup({ autoRead: fixture.data.autoRead });
++  await reopened.ready;
++  assert.equal(reopened.elements.autoReadSelect.value, 'on');
+ });

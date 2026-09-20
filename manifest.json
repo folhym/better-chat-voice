@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT × Irodori",
-  "version": "0.2.0",
-  "description": "Read individual ChatGPT replies aloud with a local Irodori-TTS Server.",
+  "version": "0.3.2",
+  "description": "Read ChatGPT replies manually or automatically with a local Irodori-TTS Server.",
   "permissions": ["storage"],
   "host_permissions": ["https://chatgpt.com/*", "http://127.0.0.1/*", "http://localhost/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
