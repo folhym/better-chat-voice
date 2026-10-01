@@ -1,41 +1,43 @@
-# chatgpt-irodori-voice v0.3.2 独立レビュー引継ぎ
+# chatgpt-irodori-voice v0.4.4 独立レビュー引継ぎ
 
-## ユーザーの要求と確認済みの現象
+## ユーザー要求
 
-ユーザーの実機Chromeで、v0.3.1 の新規回答自動読み上げは動作した。一方、左側の履歴から過去チャットを開くと、SPAで追加された過去assistant回答を新規回答と誤認して音声生成した。過去チャットの表示だけでは読み上げず、そのチャットで後から生成した新規回答と新規チャットの最初の回答は読み上げる。
+実ChromeではEnter送信でnative submitが発火せず、青い送信buttonのクリックではclick→submitの順に発火する。既存の`noteNewChatSubmission()`は旧composer selectorを含むformでなければ無視しており、実際の送信後のassistantをhistorical扱いにしていた。Enter、button click、submitを送信signalとして検出し、新しいuser messageのDOM出現を確認してからlive generationを開始する。v0.4.2の仮想スクロール履歴抑止とv0.4.3のroute割当判定を維持する。
 
-## v0.3.2 の実装
+## 実装内容
 
-- `content.js`: `location.pathname` をconversation route keyとして `scan()` の先頭で比較する。`popstate` でもscanを予約する。特定の `/c/` パス形式へ依存しない。2026-09-20 のゲストChatGPTでは、最初の送信時に `/` から `/uc/<id>` へ変化することを実画面で確認した。
-- 別会話へ移動したらhydrationを開始する。現在の自動読み上げタイマー・待ち行列・生成中通信を解除し、再生中の旧会話音声も停止する。hydration中に現れたassistant turnはすべてbaselineへ登録する。assistant本文とturn集合が最後の変化から1500ms安定したらhydrationを終了する。
-- 新規チャットの空画面 `/` へ移るときは旧会話の自動処理を解除するが、後続の新規回答をbaseline化しない。`/` からconversation URLへの割り当て時、生成中のturn、既存候補、またはcomposerの送信を観測した場合は同一の新規会話として扱う。URL割り当てがassistant DOMの挿入より早い場合も送信イベントで保護する。
-- v0.3.1 の属性なしfallback、1500msの本文安定判定、`autoHandled` / 回答IDの二重生成防止、FIFO、手動優先、回答別キャッシュ、速度、Pause / Resume / Stopは維持した。`AUTO_DEBUG` にはroute変更・hydration開始/終了・履歴turnのbaseline化の短いログを追加した。本文は記録しない。
-- `manifest.json` を `0.3.2` にし、`README.md` に履歴切替時の動作を追加した。
+- `content.js`: 旧`USER_SUBMISSION_SELECTORS`必須guardを廃止。`submitter`、送信buttonの`type`プロパティ／属性とaria、composer内editable、Enterの親方向探索を使い、submit/click/keydownから`pendingSubmissionIntent`を作る。Shift+Enter、IME変換確定、repeat、copy/retry/attachment/Stop操作は除外する。
+- signal時に既存user要素・turn keyと会話末尾を記録する。`scan()`で新しいuser messageを確認したときだけ`liveGeneration`へ昇格する。intentがない仮想スクロールは従来通りhistorical。click→submitの短時間重複は1cycleにまとめる。user確認がclickとsubmitの間に起きた場合も、後続submitを重複として扱う。
+- 新規チャットでuser message確認前にrouteが割り当てられても、v0.4.3と同じroute形状・base比較でpending intentを引き継ぐ。通常の会話切替ではpending/liveを破棄する。DEBUGログはsignal種別、dedupe、user確認、live armを本文・message IDなしで出す。
+- assistant/user DOM selector、本文安定判定、SSE、chunk、Voice、Speaker Embedding、Pause／Resume／Stop、cache、playbackRateには変更なし。
 
-## 今回変更したファイル
+## 変更ファイル
 
-`content.js`、`tests/content.test.js`、`manifest.json`、`README.md`、`review_pack/REVIEW.md`、`review_pack/changes.diff`。
+- `content.js`: 送信signal・pending intent・user確認・重複抑止
+- `tests/content.test.js`: 実機イベント形状を模したfixtureとv0.4.4回帰テスト
+- `manifest.json`: version 0.4.4
+- `README.md`: 送信検出方式の説明
+- `review_pack/REVIEW.md`、`review_pack/changes.diff`: 本資料と差分
 
-`background.js`、popup、Voice選択、Irodoriへの `speed: 1.0` 送信、ブラウザの `audio.playbackRate` は今回変更していない。
+作業ツリーには以前の版からの未コミット差分がある。`changes.diff`はGit HEADから現時点までの累積差分であり、v0.4.4レビューは上記4実装ファイルの送信検出箇所を中心に見ること。
 
 ## テスト結果
 
-- `node --test tests/*.test.js`: **38件成功**。過去チャット切替、300ms間隔の履歴turn追加、hydration後の新規回答、A→B→C→A、URL割り当て前後の新規チャット最初の回答、戻る/進む、旧会話の生成キャンセル・再生停止、DOM更新前にrouteが変わる競合を追加検証した。従来の手動再生、Speaker Embedding ID、速度、キャッシュ、FIFO、Pause / Resume / Stop、属性なしfallbackのテストも通過。
-- `node --check content.js`、Manifest JSONパース、`git diff --check`: 成功（Windows改行コード警告を除く）。
-- `review_pack/changes.diff` の逆適用チェック: 成功。
+- `node --test tests/*.test.js`: 70/70成功。
+- v0.4.4で確認: Enterとbutton clickによる既存chatの新回答、新規chat初回回答、click+submitで1cycle、user確認後に遅れたsubmitのdedupe、submitterなしのcomposer submit、ariaなしのcomposer送信button、`type`属性を省略してプロパティのみ`submit`のbutton、送信signalだけではliveを開かないこと、古いuser/assistantの仮想mount後のfresh回答、Shift+Enter、IME Enter、copy/retry/attachment除外。
+- 既存テスト: 仮想スクロール履歴0 POST、Project/GPT・通常route割当、手動読み上げ、SSE、Voice/Speaker Embedding、速度、Pause／Resume／Stop、cache等成功。
+- `node --check content.js`、Manifest JSON parse（0.4.4）、`git diff --check -- . ':!review_pack'`: 成功。
+- `git apply --reverse --check review_pack/changes.diff`: 成功。
 
-## 差分の読み方
+## 既知の問題・未確認事項
 
-`changes.diff` は現在のGit HEADと作業ツリーの累積差分で、未コミットのv0.2系・v0.3・v0.3.1も含む。今回の変更箇所は上記のファイルと `content.js` のroute/hydration関数、`tests/content.test.js` のnavigationテストを参照。
-
-## 未確認事項・既知の問題
-
-- ユーザーの実機でv0.3.1の新規回答自動読み上げと過去チャット誤読は確認済み。v0.3.2修正後の履歴切替、新規質問、実Irodori Serverとの結合動作は、この環境では未確認。自動テストはDOM・Audio・Server応答を模擬した。
-- 履歴DOMの追加が1500msを超えて中断し、その後さらに古い回答が遅れて現れる表示では、hydration終了後に誤候補となる可能性がある。実機で読み込み間隔の確認が必要。
-- 新規チャットの送信を捕捉できないUIで、assistant turnがURL割り当てより後に現れ、生成中UIもない場合は、最初の回答を履歴と誤認する可能性がある。現行ゲスト画面にはcomposerの`submit`イベントと生成中UIがある。
+- ユーザー提供の実Chromeイベントログを基に修正した。v0.4.4を認証済みChromeで再読み込みし、Enter／button送信からIrodori再生まで通す実機確認は未実施。
+- composer構造や送信buttonのtype/ariaが将来変化した場合はsignal検出が外れ、自動読み上げが開始しない可能性がある。手動読み上げは維持される。
+- pending intentはuser message確認前に30秒を超えると失効する。通常のChatGPT送信ではuser messageが即時DOMに現れる想定である。
 
 ## ChatGPTに重点的にレビューしてほしい点
 
-1. route変更とMutationObserverの発火順序にかかわらず、後から追加される履歴turnがbaseline化されるか。
-2. 新規チャット送信後の `/` からconversation URLへの割り当てで、初回回答がbaseline化されないか。
-3. route変更時に古い自動タイマー・待ち行列・生成・再生が確実に止まり、次の会話での新規回答を妨げないか。
+1. 実ChromeのEnter対象DIVからeditable/composer formへ辿れるか。
+2. 実送信buttonのclickとsubmitを1cycleとして扱い、無関係なbuttonやformを誤検出しないか。
+3. user bubble確認とroute割当の前後順が変わっても新規チャット初回回答を保持するか。
+4. 仮想スクロールで遅れてmountされた古いuser/assistantをlive対象にしないか。
